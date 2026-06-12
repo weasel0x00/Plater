@@ -125,14 +125,17 @@ mode `-W`/`-H` are the *physical maximum* plate size (your bed), and you give an
 *ideal* (smallest preferred) size to start from:
 
 * `-i ideal`, the ideal/smallest plate size, in mm. Setting this enables the fit
-  search. Plater starts at this size and grows toward `-W`/`-H`.
+  search. A single value (e.g. `-i 250`) is a square ideal. For a non-square
+  ideal use `WxH` (e.g. `-i 250x180`): width and height each start at their own
+  ideal and grow toward their own `-W`/`-H` maximum, independently.
 * `-g step`, the growth increment, in mm (default `10`).
 * `-N plates`, the number of plates to target first (default `1`).
 
-The search grows the plate size from the ideal up to the bed size in `-g` steps,
-and stops at the smallest size that fits the parts in `-N` plates (or fewer). If
-even the full bed size cannot fit them in `-N` plates, it uses one more plate and
-keeps the smallest size that achieves that fewest-plates result.
+The search grows the plate size from the ideal up to the bed size in `-g` steps
+(each axis toward its own `-W`/`-H`, never exceeding it), and stops at the
+smallest size that fits the parts in `-N` plates (or fewer). If even the full bed
+size cannot fit them in `-N` plates, it uses one more plate and keeps the
+smallest size that achieves that fewest-plates result.
 
 For example, with a 300x300 bed but a preferred 250x250 area, packing holed
 parts (hole-aware, faster) into a named 3MF:

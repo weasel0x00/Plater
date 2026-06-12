@@ -36,12 +36,12 @@ namespace Plater
             void process();
             // Solve only (populate `solution`), without writing output files.
             void solve();
-            // Grow the plate size from `idealMm` toward the configured plate
-            // size (the physical maximum), in `stepMm` increments, looking for
-            // the smallest plate that fits the parts in `targetPlates` plates.
-            // If nothing fits within `targetPlates`, the plate count is grown
-            // and the search restarts. Writes the chosen solution's files.
-            void processFit(double idealMm, double stepMm, int targetPlates);
+            // Grow the plate from an ideal size toward the configured plate
+            // size (the physical maximum -W/-H), in `stepMm` increments, looking
+            // for the smallest plate that fits the parts in `targetPlates`
+            // plates. Width and height each start at their own ideal and grow
+            // toward their own maximum. Writes the chosen solution's files.
+            void processFit(double idealWmm, double idealHmm, double stepMm, int targetPlates);
 
             // Plate mode (rectangular or circular)
             int plateMode;

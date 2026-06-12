@@ -520,7 +520,7 @@ namespace Plater
         }
     }
 
-    void Request::processFit(double idealMm, double stepMm, int targetPlates)
+    void Request::processFit(double idealWmm, double idealHmm, double stepMm, int targetPlates)
     {
         if (cancel) {
             return;
@@ -533,46 +533,57 @@ namespace Plater
         bool circle = (plateMode == PLATE_MODE_CIRCLE);
         double maxW = circle ? plateDiameter : plateWidth;
         double maxH = circle ? plateDiameter : plateHeight;
-        double ideal = idealMm * 1000.0;
+        double idealW = idealWmm * 1000.0;
+        double idealH = idealHmm * 1000.0;
+        if (circle) {
+            // A circular bed has a single dimension; grow the diameter.
+            idealH = idealW;
+        }
         double step = stepMm * 1000.0;
         if (step <= 0) {
             step = 10000.0;
         }
+        // Never start above (or grow beyond) the physical bed.
+        if (idealW > maxW) idealW = maxW;
+        if (idealH > maxH) idealH = maxH;
 
-        // Discrete grid of candidate sizes, from the ideal up to the bed size.
-        std::vector<double> sizes;
-        for (double s = ideal; ; s += step) {
-            sizes.push_back(s);
-            if (s >= maxW && s >= maxH) {
-                break;
-            }
+        // Each axis grows from its own ideal toward its own maximum by `step`,
+        // both indexed by a single step counter so the search stays 1-D and the
+        // plate area is monotonic in the counter (needed for the binary search).
+        auto axisAt = [&](double ideal, double mx, int t) -> double {
+            double v = ideal + t * step;
+            return v < mx ? v : mx;
+        };
+        int steps = 0;
+        while (axisAt(idealW, maxW, steps) < maxW || axisAt(idealH, maxH, steps) < maxH) {
+            steps++;
         }
+        // Valid step indices are 0..steps; index `steps` is the full bed size.
 
-        // Apply a candidate size: set the plate dimensions (clamped to the bed)
-        // and cheaply re-filter every already-loaded part. Returns false if a
-        // part no longer fits at this size.
-        auto applySize = [&](double size) -> bool {
+        // Apply a step: set the plate dimensions and cheaply re-filter every
+        // already-loaded part. Returns false if a part no longer fits.
+        auto applyT = [&](int t) -> bool {
+            double w = axisAt(idealW, maxW, t);
+            double h = axisAt(idealH, maxH, t);
             if (circle) {
-                plateDiameter = size < maxW ? size : maxW;
+                plateDiameter = w;
             } else {
-                plateWidth = size < maxW ? size : maxW;
-                plateHeight = size < maxH ? size : maxH;
+                plateWidth = w;
+                plateHeight = h;
             }
-            double w = circle ? plateDiameter : plateWidth;
-            double h = circle ? plateDiameter : plateHeight;
             bool feasible = true;
             for (auto &kv : parts) {
-                if (kv.second->applyPlateSize(w, h) == 0) {
+                if (kv.second->applyPlateSize(circle ? plateDiameter : plateWidth,
+                                              circle ? plateDiameter : plateHeight) == 0) {
                     feasible = false;
                 }
             }
             return feasible;
         };
 
-        // Solve at a candidate size; returns the plate count, or -1 if a part
-        // cannot fit at that size.
-        auto platesAt = [&](double size) -> int {
-            if (!applySize(size)) {
+        // Solve at a step; returns the plate count, or -1 if a part cannot fit.
+        auto platesAt = [&](int t) -> int {
+            if (!applyT(t)) {
                 return -1;
             }
             _log("* Trying plate size %g x %g mm\n",
@@ -605,7 +616,7 @@ namespace Plater
         // Fewest plates is achieved at the largest size. We accept the target
         // count, grown to whatever is actually reachable ("start at target,
         // add a plate only if forced").
-        int nMax = platesAt(sizes.back());
+        int nMax = platesAt(steps);
         if (nMax < 0) {
             hasError = true;
             error = "Parts don't fit even at the maximum plate size";
@@ -614,12 +625,12 @@ namespace Plater
         }
         int acceptable = targetPlates > nMax ? targetPlates : nMax;
 
-        // Binary-search the smallest grid size whose plate count is within the
+        // Binary-search the smallest step whose plate count is within the
         // acceptable bound (plate count is monotonic non-increasing in size).
-        int lo = 0, hi = (int)sizes.size() - 1, chosen = hi;
+        int lo = 0, hi = steps, chosen = steps;
         while (lo <= hi) {
             int mid = (lo + hi) / 2;
-            int n = platesAt(sizes[mid]);
+            int n = platesAt(mid);
             if (n > 0 && n <= acceptable) {
                 chosen = mid;
                 hi = mid - 1;
@@ -628,8 +639,8 @@ namespace Plater
             }
         }
 
-        // Ensure the final solution corresponds to the chosen size.
-        platesAt(sizes[chosen]);
+        // Ensure the final solution corresponds to the chosen step.
+        platesAt(chosen);
 
         if (consolidate) {
             consolidateSolution();
