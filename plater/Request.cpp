@@ -458,78 +458,97 @@ namespace Plater
             step = 10000.0;
         }
 
-        // Helper: apply a square trial size, clamped per-axis to the maximum.
-        auto applySize = [&](double size) {
-            double w = size < maxW ? size : maxW;
-            double h = size < maxH ? size : maxH;
-            if (circle) {
-                // A circular bed only has one dimension; clamp the diameter.
-                plateDiameter = size < maxW ? size : maxW;
-            } else {
-                plateWidth = w;
-                plateHeight = h;
-            }
-        };
-
-        double bestSize = -1;
-        int bestPlates = -1;
-        bool chosen = false;
-        double chosenSize = 0;
-
-        for (double size = ideal; ; size += step) {
-            applySize(size);
-            // Reload the parts at this plate size so the fit check is correct.
-            hasError = false;
-            error = "";
-            readPartsFromString(partsText);
-
-            bool reachedMax = (size >= maxW && size >= maxH);
-
-            if (!hasError) {
-                _log("* Trying plate size %g x %g mm (target %d plate(s))\n",
-                        (circle ? plateDiameter : plateWidth) / 1000.0,
-                        (circle ? plateDiameter : plateHeight) / 1000.0,
-                        targetPlates);
-                solve();
-                if (solution != NULL) {
-                    int n = solution->countPlates();
-                    _log("- Fits in %d plate(s)\n", n);
-                    if (n <= targetPlates) {
-                        chosen = true;
-                        chosenSize = size;
-                        break;
-                    }
-                    if (bestPlates < 0 || n < bestPlates) {
-                        bestPlates = n;
-                        bestSize = size;
-                    }
-                }
-            } else {
-                _log("* Plate size %g mm too small for some part, growing\n",
-                        size / 1000.0);
-            }
-
-            if (reachedMax) {
+        // Discrete grid of candidate sizes, from the ideal up to the bed size.
+        std::vector<double> sizes;
+        for (double s = ideal; ; s += step) {
+            sizes.push_back(s);
+            if (s >= maxW && s >= maxH) {
                 break;
             }
         }
 
-        if (!chosen) {
-            if (bestPlates < 0) {
-                hasError = true;
-                error = "Parts don't fit even at the maximum plate size";
-                cerr << "! " << error << endl;
-                return;
+        // Apply a candidate size: set the plate dimensions (clamped to the bed)
+        // and cheaply re-filter every already-loaded part. Returns false if a
+        // part no longer fits at this size.
+        auto applySize = [&](double size) -> bool {
+            if (circle) {
+                plateDiameter = size < maxW ? size : maxW;
+            } else {
+                plateWidth = size < maxW ? size : maxW;
+                plateHeight = size < maxH ? size : maxH;
             }
-            // Couldn't reach the target; use the fewest plates achievable,
-            // at the smallest size that achieves it.
-            chosenSize = bestSize;
-            applySize(chosenSize);
-            hasError = false;
-            error = "";
-            readPartsFromString(partsText);
+            double w = circle ? plateDiameter : plateWidth;
+            double h = circle ? plateDiameter : plateHeight;
+            bool feasible = true;
+            for (auto &kv : parts) {
+                if (kv.second->applyPlateSize(w, h) == 0) {
+                    feasible = false;
+                }
+            }
+            return feasible;
+        };
+
+        // Solve at a candidate size; returns the plate count, or -1 if a part
+        // cannot fit at that size.
+        auto platesAt = [&](double size) -> int {
+            if (!applySize(size)) {
+                return -1;
+            }
+            _log("* Trying plate size %g x %g mm\n",
+                    (circle ? plateDiameter : plateWidth) / 1000.0,
+                    (circle ? plateDiameter : plateHeight) / 1000.0);
             solve();
+            int n = (solution != NULL) ? solution->countPlates() : -1;
+            if (n > 0) {
+                _log("- Fits in %d plate(s)\n", n);
+            }
+            return n;
+        };
+
+        // Load the parts once, at the maximum (bed) size. Geometry is loaded
+        // here; subsequent sizes only re-run the cheap fit filter.
+        if (circle) {
+            plateDiameter = maxW;
+        } else {
+            plateWidth = maxW;
+            plateHeight = maxH;
         }
+        hasError = false;
+        error = "";
+        readPartsFromString(partsText);
+        if (hasError) {
+            cerr << "! Can't process: " << error << endl;
+            return;
+        }
+
+        // Fewest plates is achieved at the largest size. We accept the target
+        // count, grown to whatever is actually reachable ("start at target,
+        // add a plate only if forced").
+        int nMax = platesAt(sizes.back());
+        if (nMax < 0) {
+            hasError = true;
+            error = "Parts don't fit even at the maximum plate size";
+            cerr << "! " << error << endl;
+            return;
+        }
+        int acceptable = targetPlates > nMax ? targetPlates : nMax;
+
+        // Binary-search the smallest grid size whose plate count is within the
+        // acceptable bound (plate count is monotonic non-increasing in size).
+        int lo = 0, hi = (int)sizes.size() - 1, chosen = hi;
+        while (lo <= hi) {
+            int mid = (lo + hi) / 2;
+            int n = platesAt(sizes[mid]);
+            if (n > 0 && n <= acceptable) {
+                chosen = mid;
+                hi = mid - 1;
+            } else {
+                lo = mid + 1;
+            }
+        }
+
+        // Ensure the final solution corresponds to the chosen size.
+        platesAt(sizes[chosen]);
 
         if (!cancel && !hasError && solution != NULL) {
             _log("* Solution\n");
