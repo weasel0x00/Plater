@@ -166,6 +166,11 @@ The file should be described relatively to the `plater.conf` file.
 If a filename contains a space (` `), you can escape it with the \ character (like 
 `some\ plate.stl`).
 
+You can generate a `plater.conf` automatically from a directory of STL files with
+[`tools/gen_plater_conf.py`](tools/README.md) — it fills in quantities from
+`_x<N>` file-name suffixes and can split "accent" parts (prefixed `[a]`) into a
+separate config.
+
 # How does it works?
 
 The problem of placing parts is quite hard and very likely NP-complete. Plater is

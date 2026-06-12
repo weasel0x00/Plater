@@ -1,7 +1,5 @@
 #include <sstream>
 #include <iostream>
-#include <cstdio>
-#include <cstdlib>
 #if !(defined(_WIN32) || defined(_WIN64))
 #include <unistd.h>
 #endif
@@ -188,18 +186,6 @@ namespace Plater
         maskValid = true;
     }
 
-    bool Bitmap::overlapsScalar(const Bitmap *other, int offx, int offy) const
-    {
-        for (int x=0; x<width; x++) {
-            for (int y=0; y<height; y++) {
-                if (getPoint(x, y) && other->getPoint(x+offx, y+offy)) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
     bool Bitmap::overlaps(const Bitmap *other, int offx, int offy)
     {
         ensureMask();
@@ -236,14 +222,6 @@ namespace Plater
             }
         }
 
-#ifdef PLATER_VERIFY_OVERLAP
-        // Optional self-check: abort if the fast path ever disagrees with the
-        // scalar reference on real data. Enable with -DPLATER_VERIFY_OVERLAP.
-        if (hit != overlapsScalar(other, offx, offy)) {
-            fprintf(stderr, "OVERLAP MISMATCH at off=(%d,%d)\n", offx, offy);
-            abort();
-        }
-#endif
         return hit;
     }
 

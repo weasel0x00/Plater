@@ -54,12 +54,6 @@ namespace Plater
             bool overlaps(const Bitmap *other, int offx, int offy);
 
             /**
-             * Reference (scalar) overlap test, kept for validation and
-             * benchmarking against the bit-packed path.
-             */
-            bool overlapsScalar(const Bitmap *other, int offx, int offy) const;
-
-            /**
              * Write all the pixel of another bitmap into this one at a certain
              * offset
              */
