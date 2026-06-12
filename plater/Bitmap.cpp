@@ -1,5 +1,7 @@
 #include <sstream>
 #include <iostream>
+#include <cstdio>
+#include <cstdlib>
 #if !(defined(_WIN32) || defined(_WIN64))
 #include <unistd.h>
 #endif
@@ -207,7 +209,8 @@ namespace Plater
         const int wordShift = offx >> 6;   // whole 64-pixel words to shift
         const int bitShift  = offx & 63;   // sub-word bit shift
 
-        for (int y=0; y<height; y++) {
+        bool hit = false;
+        for (int y=0; y<height && !hit; y++) {
             const uint64_t *prow = &mask[(size_t)y * maskWords];
             const uint64_t *qrow = &other->mask[(size_t)(y + offy) * ow];
 
@@ -220,17 +223,28 @@ namespace Plater
                 // into the next plate word when bitShift != 0.
                 int qw = w + wordShift;
                 if (qw < ow && (qrow[qw] & (pbits << bitShift))) {
-                    return true;
+                    hit = true;
+                    break;
                 }
                 if (bitShift) {
                     int qw1 = qw + 1;
                     if (qw1 < ow && (qrow[qw1] & (pbits >> (64 - bitShift)))) {
-                        return true;
+                        hit = true;
+                        break;
                     }
                 }
             }
         }
-        return false;
+
+#ifdef PLATER_VERIFY_OVERLAP
+        // Optional self-check: abort if the fast path ever disagrees with the
+        // scalar reference on real data. Enable with -DPLATER_VERIFY_OVERLAP.
+        if (hit != overlapsScalar(other, offx, offy)) {
+            fprintf(stderr, "OVERLAP MISMATCH at off=(%d,%d)\n", offx, offy);
+            abort();
+        }
+#endif
+        return hit;
     }
 
     void Bitmap::dilatation(int iterations)
