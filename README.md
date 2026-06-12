@@ -63,9 +63,9 @@ Here are the options:
 
 * `-v`, increase the verbosity, this will output more things on `stderr` during
   the placing of the parts
-* The size of the bedplate (in 2D, top view)
-    * `-W width`, width of the plate, in mm (default `150`)
-    * `-H height`, height of the plate, in mm (default `150`)
+* `-b size`, the size of the bedplate (in 2D, top view), in mm (default `150`). A
+  single value (e.g. `-b 300`) is a square bed; use `AxB` (e.g. `-b 300x200`) for
+  a rectangular bed.
 * `-j precision`, precision, in mm (default `0.5`)
 * `-s spacing`, parts spacing, in mm (default `2`)
 * `-d delta`, sets the spacing of the brute forcing (see below), default `2`mm
@@ -77,14 +77,14 @@ Here are the options:
   every plate becomes a separate plate in the slicer (plate membership is stored
   in `Metadata/model_settings.config`, and a `Metadata/project_settings.config`
   declares the bed). Plates are arranged on the slicer's plate grid, so set
-  `-W`/`-H` to match your printer's bed for the grid to line up. The output file
+  `-b` to match your printer's bed for the grid to line up. The output file
   name is derived from `-o` with any `%`-placeholder stripped (e.g. the default
   `plate_%03d` produces `plate.3mf`).
 
   **Open this file in OrcaSlicer with File > Open Project (or double-click it) —
   not File > Import.** Orca only restores the separate plates when opening it as
   a project; importing loads the geometry onto a single plate. The file declares
-  a plain rectangular bed matching `-W`/`-H`, so re-select your printer preset
+  a plain rectangular bed matching `-b`, so re-select your printer preset
   before slicing if you need its specific settings.
 * `-o pattern`, sets the pattern of output files, default is `plate_%03d`, this
   means that the first plate will be named plate_001.stl, the second plate_002.stl
@@ -121,18 +121,18 @@ selects an alternative, and `-C` adds a consolidation pass:
 
 Instead of placing on a single fixed plate size, Plater can search for the
 smallest plate that still fits your parts in as few plates as possible. In this
-mode `-W`/`-H` are the *physical maximum* plate size (your bed), and you give an
+mode `-b` are the *physical maximum* plate size (your bed), and you give an
 *ideal* (smallest preferred) size to start from:
 
 * `-i ideal`, the ideal/smallest plate size, in mm. Setting this enables the fit
   search. A single value (e.g. `-i 250`) is a square ideal. For a non-square
   ideal use `WxH` (e.g. `-i 250x180`): width and height each start at their own
-  ideal and grow toward their own `-W`/`-H` maximum, independently.
+  ideal and grow toward their own `-b` maximum, independently.
 * `-g step`, the growth increment, in mm (default `10`).
 * `-N plates`, the number of plates to target first (default `1`).
 
 The search grows the plate size from the ideal up to the bed size in `-g` steps
-(each axis toward its own `-W`/`-H`, never exceeding it), and stops at the
+(each axis toward its own `-b`, never exceeding it), and stops at the
 smallest size that fits the parts in `-N` plates (or fewer). If even the full bed
 size cannot fit them in `-N` plates, it uses one more plate and keeps the
 smallest size that achieves that fewest-plates result.
@@ -140,7 +140,7 @@ smallest size that achieves that fewest-plates result.
 For example, with a 300x300 bed but a preferred 250x250 area, packing holed
 parts (hole-aware, faster) into a named 3MF:
 
-    plater -W 300 -H 300 -i 250 -g 5 -A pruned -C -m -O job project.conf
+    plater -b 300 -i 250 -g 5 -A pruned -C -m -O job project.conf
 
 This tries 250, 255, ... up to 300 on a single plate; if nothing fits on one
 plate it moves to two plates (again preferring the smallest size), and so on.

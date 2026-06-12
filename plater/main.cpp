@@ -23,9 +23,8 @@ void help()
     cerr << endl;
     cerr << "-h: Display this help" << endl;
     cerr << "-v: Verbose mode" << endl;
-    cerr << "The size of the bed plate (topview, 2D):" << endl;
-    cerr << "  -W width: Setting the plate width (default: 150mm)" << endl;
-    cerr << "  -H height: Setting the plate height (default: 150mm)" << endl;
+    cerr << "-b size: bed plate size in mm (topview, 2D); default 150. A single value" << endl;
+    cerr << "         is square; use AxB (e.g. 300x200) for a rectangular bed" << endl;
     cerr << "-D diameter: Set the plate diameter, in mm. If set, this will put the plate in circular mode" << endl;
     cerr << "-j precision: Sets the precision (in mm, default: 0.5)" << endl;
     cerr << "-s spacing: Change the spacing between parts (in mm, default: 1.5)" << endl;
@@ -43,10 +42,10 @@ void help()
     cerr << "     skyline  - skyline bottom-left drop (fastest; no hole filling; rectangular plates)" << endl;
     cerr << "     contact  - skyline with max-contact scoring (denser; no hole filling)" << endl;
     cerr << "-C: consolidation pass - try to empty the sparsest plate into the others' gaps" << endl;
-    cerr << "Fit search (grow the plate from an ideal size up to the bed size -W/-H):" << endl;
+    cerr << "Fit search (grow the plate from an ideal size up to the bed size -b):" << endl;
     cerr << "  -i ideal: ideal (smallest) plate size in mm; enables the fit search." << endl;
     cerr << "            A single value is square; use WxH (e.g. 250x180) to grow each axis" << endl;
-    cerr << "            from its own ideal toward -W/-H independently" << endl;
+    cerr << "            from its own ideal toward -b independently" << endl;
     cerr << "  -g step: growth step in mm while searching (default: 10)" << endl;
     cerr << "  -N plates: number of plates to target first, grows if needed (default: 1)" << endl;
     cerr << "-t threads: sets the number of threads (default 1)" << endl;
@@ -65,7 +64,7 @@ int main(int argc, char *argv[])
     double fitStep = 10;
     int fitTarget = 1;
 
-    while ((index = getopt(argc, argv, "hvs:d:r:pmA:CO:j:d:o:W:H:R:D:t:Sci:g:N:")) != -1) {
+    while ((index = getopt(argc, argv, "hvs:d:r:pmA:CO:j:d:o:b:R:D:t:Sci:g:N:")) != -1) {
         switch (index) {
             case 'h':
                 help();
@@ -118,12 +117,19 @@ int main(int argc, char *argv[])
             case 'O':
                 request.outputFile = string(optarg);
                 break;
-            case 'W':
-                request.plateWidth = atof(optarg)*1000;
+            case 'b': {
+                // A single value is a square bed; "AxB" (or "A,B") sets a
+                // rectangular bed width x height.
+                string v = string(optarg);
+                size_t sep = v.find_first_of("xX,");
+                if (sep != string::npos) {
+                    request.plateWidth = atof(v.substr(0, sep).c_str())*1000;
+                    request.plateHeight = atof(v.substr(sep + 1).c_str())*1000;
+                } else {
+                    request.plateWidth = request.plateHeight = atof(v.c_str())*1000;
+                }
                 break;
-            case 'H':
-                request.plateHeight = atof(optarg)*1000;
-                break;
+            }
             case 'S':
                 request.sortMode = REQUEST_MULTIPLE_SORTS;
                 break;
