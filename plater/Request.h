@@ -92,6 +92,10 @@ namespace Plater
             // Number of threads
             unsigned int nbThreads;
 
+            // Use the skyline (bottom-left drop) placement heuristic instead of
+            // the full brute-force position grid (rectangular plates only).
+            bool skyline;
+
         protected:
             void addPart(std::string filename, int quantity, std::string orientation);
             std::vector<std::string> getChunks(string line);

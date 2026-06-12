@@ -37,7 +37,8 @@ namespace Plater
         cancel(false),
         solution(NULL),
         nbThreads(1),
-        platesInfo(false)
+        platesInfo(false),
+        skyline(false)
     {
     }
 

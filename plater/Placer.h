@@ -44,6 +44,7 @@ namespace Plater
             Request *request;
 
             bool placePart(Plate *plate, PlacedPart *part);
+            bool placePartSkyline(Plate *plate, PlacedPart *part);
     };
 }
 

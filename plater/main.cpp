@@ -36,6 +36,7 @@ void help()
     cerr << "-o pattern: output file pattern (default: plate_%03d)" << endl;
     cerr << "-p: will output ppm of the plates" << endl;
     cerr << "-m: output a single 3MF file containing all the plates" << endl;
+    cerr << "-k: use the skyline (bottom-left drop) placement heuristic (faster; rectangular plates)" << endl;
     cerr << "Fit search (grow the plate from an ideal size up to the bed size -W/-H):" << endl;
     cerr << "  -i ideal: ideal (smallest) plate size in mm; enables the fit search" << endl;
     cerr << "  -g step: growth step in mm while searching (default: 10)" << endl;
@@ -55,7 +56,7 @@ int main(int argc, char *argv[])
     double fitStep = 10;
     int fitTarget = 1;
 
-    while ((index = getopt(argc, argv, "hvs:d:r:pmj:d:o:W:H:R:D:t:Sci:g:N:")) != -1) {
+    while ((index = getopt(argc, argv, "hvs:d:r:pmkj:d:o:W:H:R:D:t:Sci:g:N:")) != -1) {
         switch (index) {
             case 'h':
                 help();
@@ -77,6 +78,9 @@ int main(int argc, char *argv[])
                 break;
             case 'm':
                 request.mode = REQUEST_3MF;
+                break;
+            case 'k':
+                request.skyline = true;
                 break;
             case 'j':
                 request.precision = atof(optarg)*1000;
