@@ -1,5 +1,6 @@
 #define _USE_MATH_DEFINES
 #include <set>
+#include <algorithm>
 #include <math.h>
 #include <sstream>
 #include <fstream>
@@ -41,7 +42,8 @@ namespace Plater
         platesInfo(false),
         skyline(false),
         contact(false),
-        prunedBrute(false)
+        prunedBrute(false),
+        consolidate(false)
     {
     }
 
@@ -438,6 +440,56 @@ namespace Plater
         }
     }
 
+    void Request::consolidateSolution()
+    {
+        if (solution == NULL) {
+            return;
+        }
+
+        // Try to repack every part into one fewer plate, then keep going. The
+        // greedy already first-fits each part onto the earliest plate, so the
+        // only way to drop a plate is to re-pack with rearrangement; we explore
+        // a few orderings (the base run may have used just one) and accept a
+        // result only when it strictly reduces the plate count.
+        bool improved = true;
+        while (improved && solution->countPlates() > 1) {
+            improved = false;
+            int target = solution->countPlates() - 1;
+
+            std::vector<int> orderings;
+            orderings.push_back(PLACER_SORT_SURFACE_DEC);
+            orderings.push_back(PLACER_SORT_SURFACE_INC);
+            for (int s=0; s<16; s++) {
+                orderings.push_back(PLACER_SORT_SHUFFLE);
+            }
+
+            for (int ordering : orderings) {
+                Placer placer(this);
+                placer.setMaxPlates(target);
+                placer.sortParts(ordering);
+                placer.setGravityMode(PLACER_GRAVITY_YX);
+                placer.setRotateOffset(0);
+                placer.setRotateDirection(0);
+
+                Solution *candidate = placer.place();
+                if (candidate != NULL && candidate->countPlates() <= target) {
+                    _log("- Consolidated: %d -> %d plates\n",
+                            target + 1, candidate->countPlates());
+                    delete solution;
+                    solution = candidate;
+                    improved = true;
+                    break;
+                } else if (candidate != NULL) {
+                    delete candidate;
+                }
+            }
+        }
+
+        if (!cancel && solution != NULL) {
+            plates = solution->countPlates();
+        }
+    }
+
     void Request::process()
     {
         if (hasError) {
@@ -446,6 +498,10 @@ namespace Plater
         }
 
         solve();
+
+        if (consolidate) {
+            consolidateSolution();
+        }
 
         if (!cancel && !hasError && solution != NULL) {
             _log("* Solution\n");
@@ -565,6 +621,10 @@ namespace Plater
 
         // Ensure the final solution corresponds to the chosen size.
         platesAt(sizes[chosen]);
+
+        if (consolidate) {
+            consolidateSolution();
+        }
 
         if (!cancel && !hasError && solution != NULL) {
             _log("* Solution\n");

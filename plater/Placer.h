@@ -33,23 +33,31 @@ namespace Plater
             void setRotateDirection(int direction);
             void setRotateOffset(int offset);
             void setScoreMode(int scoreMode);
+            // Cap the number of plates; place() returns NULL if the parts don't
+            // fit within the cap. 0 means no cap (default).
+            void setMaxPlates(int maxPlates);
 
             PlacedPart *getNextPart();
             Solution *place();
             void placeThreaded();
             Solution *solution;
-            
+
+            // Search for a spot for `part` on `plate` and place it if one is
+            // found (respects the configured algorithm). Used directly by the
+            // consolidation pass.
+            bool placePart(Plate *plate, PlacedPart *part);
+
         protected:
             std::thread *myThread;
             int rotateOffset;
             int rotateDirection;
             int scoreMode;
+            int maxPlates;
             std::map<Plate *, std::map<std::string, bool> > cache;
             float xCoef, yCoef;
             vector<PlacedPart *> parts;
             Request *request;
 
-            bool placePart(Plate *plate, PlacedPart *part);
             bool placePartSkyline(Plate *plate, PlacedPart *part);
             bool placePartPruned(Plate *plate, PlacedPart *part);
     };

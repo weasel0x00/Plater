@@ -104,6 +104,14 @@ namespace Plater
             // brute force (fills holes/cavities) but with score-based pruning.
             bool prunedBrute;
 
+            // Post-pass: try to empty the sparsest plate by re-placing its
+            // parts into the gaps of the others; kept only if plates drop.
+            bool consolidate;
+
+            // Try to reduce the plate count of `solution` in place. Safe: only
+            // applied when it strictly reduces the number of plates.
+            void consolidateSolution();
+
         protected:
             void addPart(std::string filename, int quantity, std::string orientation);
             std::vector<std::string> getChunks(string line);

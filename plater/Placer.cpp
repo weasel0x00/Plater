@@ -10,8 +10,10 @@ namespace Plater
 {
     Placer::Placer(Request *request_)
         : solution(NULL),
+        myThread(NULL),
         rotateDirection(0),
         scoreMode(PLACER_SCORE_GRAVITY),
+        maxPlates(0),
         request(request_)
     {
         for (auto part : request->quantities) {
@@ -30,6 +32,12 @@ namespace Plater
         if (myThread != NULL) {
             myThread->join();
             delete myThread;
+        }
+        // After place() the queue is empty (parts are owned by plates). Any
+        // parts left here belong to a placer that never ran (e.g. one created
+        // only to reuse placePart), so free them.
+        for (auto part : parts) {
+            delete part;
         }
     }
 
@@ -74,6 +82,11 @@ namespace Plater
     void Placer::setScoreMode(int scoreMode_)
     {
         scoreMode = scoreMode_;
+    }
+
+    void Placer::setMaxPlates(int maxPlates_)
+    {
+        maxPlates = maxPlates_;
     }
             
     void Placer::setGravityMode(int gravityMode)
@@ -360,7 +373,8 @@ namespace Plater
         solution->addPlate();
 
         _log("* Placer\n");
-        while (parts.size()) {
+        bool failed = false;
+        while (parts.size() && !failed) {
             PlacedPart *part = getNextPart();
             // _log("- Trying to place %s...\n", part->getPart()->getFilename().c_str());
             bool placed = false;
@@ -370,13 +384,31 @@ namespace Plater
 
                 if (placePart(plate, part)) {
                     placed = true;
-                } else {
-                    if (i+1 == solution->countPlates()) {
-                        // _log("! Creating a new plate\n");
-                        solution->addPlate();
+                } else if (i+1 == solution->countPlates()) {
+                    // Last existing plate didn't fit it; add one unless capped.
+                    if (maxPlates > 0 && solution->countPlates() >= maxPlates) {
+                        break;
                     }
+                    // _log("! Creating a new plate\n");
+                    solution->addPlate();
                 }
             }
+
+            if (!placed) {
+                // Only reachable when capped: the part won't fit in the cap.
+                delete part;
+                failed = true;
+            }
+        }
+
+        if (failed) {
+            for (auto p : parts) {
+                delete p;
+            }
+            parts.clear();
+            delete solution;
+            this->solution = NULL;
+            return NULL;
         }
 
         _log("- Solution with %d plates\n", solution->countPlates());
