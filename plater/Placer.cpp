@@ -11,6 +11,7 @@ namespace Plater
     Placer::Placer(Request *request_)
         : solution(NULL),
         rotateDirection(0),
+        scoreMode(PLACER_SCORE_GRAVITY),
         request(request_)
     {
         for (auto part : request->quantities) {
@@ -69,6 +70,11 @@ namespace Plater
     {
         rotateOffset = offset;
     }
+
+    void Placer::setScoreMode(int scoreMode_)
+    {
+        scoreMode = scoreMode_;
+    }
             
     void Placer::setGravityMode(int gravityMode)
     {
@@ -106,8 +112,13 @@ namespace Plater
 
         bool found = false;
         float betterScore = 0;
+        int betterContact = -1;
         int betterX = 0, betterY = 0, betterR = 0;
         std::vector<int> bottom, top;
+        // Outline cells (occupied pixel + outward direction), built per rotation
+        // only when contact scoring is active.
+        std::vector<int> bpx, bpy, bdx, bdy;
+        static const int DIRS[4][2] = {{1,0},{-1,0},{0,1},{0,-1}};
 
         for (int r=(rotateDirection ? rs-1 : 0); rotateDirection ? r>=0 : r<rs; rotateDirection ? r-- : r++) {
             int vr = (r+rotateOffset)%rs;
@@ -132,6 +143,24 @@ namespace Plater
                             bottom[px] = py;
                         }
                         top[px] = py;
+                    }
+                }
+            }
+
+            // For contact scoring, collect the part's outward-facing outline.
+            if (scoreMode == PLACER_SCORE_CONTACT) {
+                bpx.clear(); bpy.clear(); bdx.clear(); bdy.clear();
+                for (int px=0; px<pw; px++) {
+                    for (int py=0; py<ph; py++) {
+                        if (!pb->getPoint(px, py)) {
+                            continue;
+                        }
+                        for (int d=0; d<4; d++) {
+                            if (!pb->getPoint(px+DIRS[d][0], py+DIRS[d][1])) {
+                                bpx.push_back(px); bpy.push_back(py);
+                                bdx.push_back(DIRS[d][0]); bdy.push_back(DIRS[d][1]);
+                            }
+                        }
                     }
                 }
             }
@@ -161,9 +190,32 @@ namespace Plater
                 float gx = gx0 + X*precision;
                 float gy = gy0 + restingY*precision;
                 float score = gy*yCoef + gx*xCoef;
-                if (!found || score < betterScore) {
+
+                bool better;
+                int contact = 0;
+                if (scoreMode == PLACER_SCORE_CONTACT) {
+                    // Count outline cells whose outward neighbour is the bed
+                    // edge (a wall) or an already-occupied pixel (a part).
+                    for (size_t i=0; i<bpx.size(); i++) {
+                        int qx = X + bpx[i] + bdx[i];
+                        int qy = restingY + bpy[i] + bdy[i];
+                        if (qx < 0 || qx >= bw || qy < 0 || qy >= bh) {
+                            contact++;
+                        } else if (plate->bmp->getPoint(qx, qy)) {
+                            contact++;
+                        }
+                    }
+                    // Prefer more contact, breaking ties with gravity.
+                    better = !found || contact > betterContact ||
+                             (contact == betterContact && score < betterScore);
+                } else {
+                    better = !found || score < betterScore;
+                }
+
+                if (better) {
                     found = true;
                     betterScore = score;
+                    betterContact = contact;
                     betterX = X;
                     betterY = restingY;
                     betterR = vr;

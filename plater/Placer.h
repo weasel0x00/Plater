@@ -16,6 +16,10 @@
 #define PLACER_GRAVITY_XY       1
 #define PLACER_GRAVITY_EQ       2
 
+// Candidate scoring for the skyline placer
+#define PLACER_SCORE_GRAVITY    0
+#define PLACER_SCORE_CONTACT    1
+
 namespace Plater
 {
     class Placer
@@ -28,6 +32,7 @@ namespace Plater
             void setGravityMode(int gravityMode);
             void setRotateDirection(int direction);
             void setRotateOffset(int offset);
+            void setScoreMode(int scoreMode);
 
             PlacedPart *getNextPart();
             Solution *place();
@@ -38,6 +43,7 @@ namespace Plater
             std::thread *myThread;
             int rotateOffset;
             int rotateDirection;
+            int scoreMode;
             std::map<Plate *, std::map<std::string, bool> > cache;
             float xCoef, yCoef;
             vector<PlacedPart *> parts;

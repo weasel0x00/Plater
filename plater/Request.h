@@ -96,6 +96,10 @@ namespace Plater
             // the full brute-force position grid (rectangular plates only).
             bool skyline;
 
+            // Also try max-contact scored skyline placements (denser packing).
+            // Only used together with skyline.
+            bool contact;
+
         protected:
             void addPart(std::string filename, int quantity, std::string orientation);
             std::vector<std::string> getChunks(string line);

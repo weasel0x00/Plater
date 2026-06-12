@@ -39,7 +39,8 @@ namespace Plater
         solution(NULL),
         nbThreads(1),
         platesInfo(false),
-        skyline(false)
+        skyline(false),
+        contact(false)
     {
     }
 
@@ -368,6 +369,18 @@ namespace Plater
                         placer->setGravityMode(gravity);
                         placer->setRotateDirection(rotateDirection);
                         placer->setRotateOffset(rotateOffset);
+                        placers.push_back(placer);
+                    }
+
+                    // Add a max-contact scored skyline placer for this config.
+                    // The solver keeps the best result, so these only ever help.
+                    if (skyline && contact) {
+                        Placer *placer = new Placer(this);
+                        placer->sortParts(sortMode);
+                        placer->setGravityMode(PLACER_GRAVITY_YX);
+                        placer->setRotateDirection(rotateDirection);
+                        placer->setRotateOffset(rotateOffset);
+                        placer->setScoreMode(PLACER_SCORE_CONTACT);
                         placers.push_back(placer);
                     }
                 }
