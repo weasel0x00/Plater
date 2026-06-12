@@ -41,7 +41,9 @@ set(ALL_SOURCES
     Request.cpp
     Solution.cpp
     Triangle.cpp
-    
+    ThreeMF.cpp
+    Zip.cpp
+
     sleep.cpp
     log.cpp
     util.cpp

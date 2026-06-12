@@ -35,6 +35,11 @@ void help()
     cerr << "-R random: Sets the number of random (shuffled parts) iterations (only with -S)" << endl;
     cerr << "-o pattern: output file pattern (default: plate_%03d)" << endl;
     cerr << "-p: will output ppm of the plates" << endl;
+    cerr << "-m: output a single 3MF file containing all the plates" << endl;
+    cerr << "Fit search (grow the plate from an ideal size up to the bed size -W/-H):" << endl;
+    cerr << "  -i ideal: ideal (smallest) plate size in mm; enables the fit search" << endl;
+    cerr << "  -g step: growth step in mm while searching (default: 10)" << endl;
+    cerr << "  -N plates: number of plates to target first, grows if needed (default: 1)" << endl;
     cerr << "-t threads: sets the number of threads (default 1)" << endl;
     cerr << "-c: enables the output of plates.csv containing plates infos" << endl;
     exit(EXIT_FAILURE);
@@ -45,7 +50,12 @@ int main(int argc, char *argv[])
     int index;
     Request request;
 
-    while ((index = getopt(argc, argv, "hvs:d:r:pj:d:o:W:H:R:D:t:Sc")) != -1) {
+    bool fitMode = false;
+    double fitIdeal = 0;
+    double fitStep = 10;
+    int fitTarget = 1;
+
+    while ((index = getopt(argc, argv, "hvs:d:r:pmj:d:o:W:H:R:D:t:Sci:g:N:")) != -1) {
         switch (index) {
             case 'h':
                 help();
@@ -64,6 +74,9 @@ int main(int argc, char *argv[])
                 break;
             case 'p':
                 request.mode = REQUEST_PPM;
+                break;
+            case 'm':
+                request.mode = REQUEST_3MF;
                 break;
             case 'j':
                 request.precision = atof(optarg)*1000;
@@ -93,6 +106,16 @@ int main(int argc, char *argv[])
             case 'c':
                 request.platesInfo = true;
                 break;
+            case 'i':
+                fitIdeal = atof(optarg);
+                fitMode = true;
+                break;
+            case 'g':
+                fitStep = atof(optarg);
+                break;
+            case 'N':
+                fitTarget = atoi(optarg);
+                break;
         }
     }
 
@@ -106,7 +129,12 @@ int main(int argc, char *argv[])
     } else {
         help();
     }
-    request.process();
+
+    if (fitMode) {
+        request.processFit(fitIdeal, fitStep, fitTarget);
+    } else {
+        request.process();
+    }
 
     return EXIT_SUCCESS;
 }
