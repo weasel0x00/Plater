@@ -285,22 +285,31 @@ namespace Plater
         // 3MF packs every plate into a single file rather than one file
         // per plate, so it is handled on its own.
         if (mode == REQUEST_3MF) {
-            string out = pattern;
-            // Drop any printf-style placeholder (and trailing separators)
-            // since there is only one output file.
-            size_t pos = out.find('%');
-            if (pos != string::npos) {
-                out = out.substr(0, pos);
+            string out;
+            if (!outputFile.empty()) {
+                // Explicit output name (-O); add the extension if missing.
+                out = outputFile;
+                if (out.size() < 4 || out.substr(out.size()-4) != ".3mf") {
+                    out += ".3mf";
+                }
+            } else {
+                out = pattern;
+                // Drop any printf-style placeholder (and trailing separators)
+                // since there is only one output file.
+                size_t pos = out.find('%');
+                if (pos != string::npos) {
+                    out = out.substr(0, pos);
+                }
+                while (!out.empty() &&
+                       (out.back() == '_' || out.back() == '-' ||
+                        out.back() == '.' || out.back() == ' ')) {
+                    out.pop_back();
+                }
+                if (out.empty()) {
+                    out = "plates";
+                }
+                out += ".3mf";
             }
-            while (!out.empty() &&
-                   (out.back() == '_' || out.back() == '-' ||
-                    out.back() == '.' || out.back() == ' ')) {
-                out.pop_back();
-            }
-            if (out.empty()) {
-                out = "plates";
-            }
-            out += ".3mf";
 
             _log("- Exporting %s...\n", out.c_str());
             generatedFiles.push_back(out);

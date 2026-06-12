@@ -62,6 +62,9 @@ namespace Plater
             float spacing;
             // Output file pattern
             std::string pattern;
+            // Explicit output file name for the single 3MF file (-O). Empty
+            // means derive the name from the pattern.
+            std::string outputFile;
 
             void writeFiles(Solution *solution);
             void writeSTL(Plate *plate, const char *filename);

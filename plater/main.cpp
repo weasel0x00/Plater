@@ -36,6 +36,7 @@ void help()
     cerr << "-o pattern: output file pattern (default: plate_%03d)" << endl;
     cerr << "-p: will output ppm of the plates" << endl;
     cerr << "-m: output a single 3MF file containing all the plates" << endl;
+    cerr << "-O name: name of the 3MF output file (default: plate.3mf); .3mf added if missing" << endl;
     cerr << "-A algorithm: placement algorithm (default: brute). One of:" << endl;
     cerr << "     brute    - original full brute force (hole-aware)" << endl;
     cerr << "     pruned   - hole-aware pruned brute force (same packing as brute, faster)" << endl;
@@ -61,7 +62,7 @@ int main(int argc, char *argv[])
     double fitStep = 10;
     int fitTarget = 1;
 
-    while ((index = getopt(argc, argv, "hvs:d:r:pmA:Cj:d:o:W:H:R:D:t:Sci:g:N:")) != -1) {
+    while ((index = getopt(argc, argv, "hvs:d:r:pmA:CO:j:d:o:W:H:R:D:t:Sci:g:N:")) != -1) {
         switch (index) {
             case 'h':
                 help();
@@ -110,6 +111,9 @@ int main(int argc, char *argv[])
                 break;
             case 'o':
                 request.pattern = string(optarg);
+                break;
+            case 'O':
+                request.outputFile = string(optarg);
                 break;
             case 'W':
                 request.plateWidth = atof(optarg)*1000;
