@@ -89,6 +89,33 @@ Here are the options:
 * `-o pattern`, sets the pattern of output files, default is `plate_%03d`, this
   means that the first plate will be named plate_001.stl, the second plate_002.stl
   and so on.
+* `-O name`, sets the name of the single `-m` 3MF output file (default
+  `plate.3mf`). The `.3mf` extension is appended if missing. Use this so repeated
+  runs don't overwrite a previous export, e.g. `-O TridentR2` writes
+  `TridentR2.3mf`.
+
+## Placement algorithm
+
+By default Plater uses its original brute-force placement. The `-A` option
+selects an alternative, and `-C` adds a consolidation pass:
+
+* `-A algorithm`, selects the placement algorithm (default `brute`):
+    * `brute` — the original full brute-force search. Hole-aware: it can nest
+      small parts inside holes/cavities of larger ones for the tightest packing.
+    * `pruned` — hole-aware pruned brute force. Produces **identical** packing to
+      `brute` (same plates, byte-for-byte) but is faster. Recommended when your
+      parts have holes.
+    * `skyline` — bottom-left "drop" heuristic. Fastest, but it **cannot fill
+      holes** (it only stacks onto the top profile), so it can need a larger
+      plate for parts with cavities. Best for hole-free parts. Rectangular plates
+      only; falls back to brute for circular beds.
+    * `contact` — `skyline` with max-contact scoring (denser placement). Same
+      no-hole-filling limitation as `skyline`.
+* `-C`, consolidation pass. After placing, try to drop a plate by re-packing all
+  parts into one fewer plate (exploring several part orderings); the result is
+  kept only if it strictly reduces the plate count, so it never makes things
+  worse. Useful when a single-sort run leaves a sparse trailing plate; redundant
+  with the broader search of `-S`.
 
 ## Fit search (ideal plate size)
 
@@ -107,9 +134,10 @@ and stops at the smallest size that fits the parts in `-N` plates (or fewer). If
 even the full bed size cannot fit them in `-N` plates, it uses one more plate and
 keeps the smallest size that achieves that fewest-plates result.
 
-For example, with a 300x300 bed but a preferred 250x250 area:
+For example, with a 300x300 bed but a preferred 250x250 area, packing holed
+parts (hole-aware, faster) into a named 3MF:
 
-    plater -W 300 -H 300 -i 250 -g 5 -m -o job project.conf
+    plater -W 300 -H 300 -i 250 -g 5 -A pruned -C -m -O job project.conf
 
 This tries 250, 255, ... up to 300 on a single plate; if nothing fits on one
 plate it moves to two plates (again preferring the smallest size), and so on.
