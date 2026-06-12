@@ -2,6 +2,8 @@
 #include <cstdio>
 #include <sstream>
 #include <vector>
+#include <string>
+#include <unordered_map>
 #include "ThreeMF.h"
 #include "Zip.h"
 #include "Plate.h"
@@ -49,29 +51,53 @@ namespace Plater
         return std::string(buffer);
     }
 
-    // Append a <mesh> element for a baked model as a triangle soup (three
-    // vertices per triangle). Slicers de-duplicate vertices on import.
+    // Append a <mesh> element for a baked model. Vertices are welded by
+    // position (3MF is an indexed format and slicers trust the indices, so a
+    // triangle soup with duplicated vertices reads as non-manifold). Two
+    // vertices merge when their millimetre coordinates print identically, which
+    // recovers the shared topology of a well-formed source mesh.
     static void appendMesh(std::ostream &os, const Model &model)
     {
-        os << "<mesh><vertices>";
+        std::unordered_map<std::string, int> seen;
+        std::vector<std::string> verts;   // formatted "x y z" per unique vertex
+        std::vector<int> tris;            // flattened, 3 indices per triangle
+
         for (const auto &volume : model.volumes) {
             for (const auto &face : volume.faces) {
                 for (int i = 0; i < 3; i++) {
-                    os << "<vertex x=\"" << mm(face.v[i].x)
-                       << "\" y=\"" << mm(face.v[i].y)
-                       << "\" z=\"" << mm(face.v[i].z) << "\"/>";
+                    std::string key = mm(face.v[i].x);
+                    key += ' ';
+                    key += mm(face.v[i].y);
+                    key += ' ';
+                    key += mm(face.v[i].z);
+                    auto it = seen.find(key);
+                    int id;
+                    if (it == seen.end()) {
+                        id = (int)verts.size();
+                        seen.emplace(key, id);
+                        verts.push_back(key);
+                    } else {
+                        id = it->second;
+                    }
+                    tris.push_back(id);
                 }
             }
         }
+
+        os << "<mesh><vertices>";
+        for (const auto &v : verts) {
+            // v is "x y z"; split back into the three attributes.
+            size_t a = v.find(' ');
+            size_t b = v.find(' ', a + 1);
+            os << "<vertex x=\"" << v.substr(0, a)
+               << "\" y=\"" << v.substr(a + 1, b - a - 1)
+               << "\" z=\"" << v.substr(b + 1) << "\"/>";
+        }
         os << "</vertices><triangles>";
-        int idx = 0;
-        for (const auto &volume : model.volumes) {
-            for (size_t i = 0; i < volume.faces.size(); i++) {
-                os << "<triangle v1=\"" << idx
-                   << "\" v2=\"" << (idx + 1)
-                   << "\" v3=\"" << (idx + 2) << "\"/>";
-                idx += 3;
-            }
+        for (size_t i = 0; i < tris.size(); i += 3) {
+            os << "<triangle v1=\"" << tris[i]
+               << "\" v2=\"" << tris[i + 1]
+               << "\" v3=\"" << tris[i + 2] << "\"/>";
         }
         os << "</triangles></mesh>";
     }
