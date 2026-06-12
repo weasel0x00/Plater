@@ -100,6 +100,10 @@ namespace Plater
             // Only used together with skyline.
             bool contact;
 
+            // Hole-aware pruned brute force: same placements as the default
+            // brute force (fills holes/cavities) but with score-based pruning.
+            bool prunedBrute;
+
         protected:
             void addPart(std::string filename, int quantity, std::string orientation);
             std::vector<std::string> getChunks(string line);

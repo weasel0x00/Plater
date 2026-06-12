@@ -40,7 +40,8 @@ namespace Plater
         nbThreads(1),
         platesInfo(false),
         skyline(false),
-        contact(false)
+        contact(false),
+        prunedBrute(false)
     {
     }
 

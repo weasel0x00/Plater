@@ -234,10 +234,77 @@ namespace Plater
         }
     }
 
+    bool Placer::placePartPruned(Plate *plate, PlacedPart *part)
+    {
+        std::string cacheName = part->getName();
+        if (cache[plate][cacheName]) {
+            return false;
+        }
+
+        int rs = ceil(M_PI*2/request->deltaR);
+        bool found = false;
+        float betterScore = 0;
+        float betterX = 0, betterY = 0;
+        int betterR = 0;
+
+        for (int r=(rotateDirection ? rs-1 : 0); rotateDirection ? r>=0 : r<rs; rotateDirection ? r-- : r++) {
+            int vr = (r+rotateOffset)%rs;
+            part->setRotation(vr);
+            if (part->getBmp() == NULL) {
+                continue;
+            }
+            float gx0 = part->getGX();
+            float gy0 = part->getGY();
+
+            for (float x=0; x<plate->width; x+=request->delta) {
+                float gx = gx0 + x;
+                // The lowest possible score for this column is at y=0. Because
+                // gx grows with x, once a column's best case can't beat the
+                // current best, no later column (this rotation) can either.
+                float colMin = gy0*yCoef + gx*xCoef;
+                if (found && colMin >= betterScore) {
+                    break;
+                }
+                for (float y=0; y<plate->height; y+=request->delta) {
+                    float score = (gy0+y)*yCoef + gx*xCoef;
+                    if (found && score >= betterScore) {
+                        break;  // higher y only scores worse -> next column
+                    }
+                    part->setOffset(x, y);
+                    if (plate->canPlace(part)) {
+                        // First feasible cell in a column is its best (lowest)
+                        // score, and it strictly beats the current best (else we
+                        // would have broken above). Full collision keeps this
+                        // hole-aware, identical to the brute-force result.
+                        found = true;
+                        betterScore = score;
+                        betterX = x;
+                        betterY = y;
+                        betterR = vr;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (found) {
+            part->setRotation(betterR);
+            part->setOffset(betterX, betterY);
+            plate->place(part);
+            return true;
+        } else {
+            cache[plate][cacheName] = true;
+            return false;
+        }
+    }
+
     bool Placer::placePart(Plate *plate, PlacedPart *part)
     {
         if (request->skyline && plate->mode == PLATE_MODE_RECTANGLE) {
             return placePartSkyline(plate, part);
+        }
+        if (request->prunedBrute) {
+            return placePartPruned(plate, part);
         }
 
         std::string cacheName = part->getName();

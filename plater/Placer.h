@@ -51,6 +51,7 @@ namespace Plater
 
             bool placePart(Plate *plate, PlacedPart *part);
             bool placePartSkyline(Plate *plate, PlacedPart *part);
+            bool placePartPruned(Plate *plate, PlacedPart *part);
     };
 }
 
