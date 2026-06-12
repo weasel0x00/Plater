@@ -1,5 +1,7 @@
 #include <iostream>
 #include <fcntl.h>
+#include <cstring>
+#include <vector>
 #if defined(_WIN32) || defined(_WIN64)
 #include "wingetopt.h"
 #else
@@ -14,6 +16,36 @@
 
 using namespace std;
 using namespace Plater;
+
+// Reorder argv so option arguments precede operands (the conf file), letting
+// options appear in any position. BSD/macOS getopt otherwise stops parsing at
+// the first non-option, silently ignoring options placed after the file.
+static void permuteArgs(int argc, char *argv[], const char *optstring)
+{
+    std::vector<char*> opts, operands;
+    for (int i = 1; i < argc; i++) {
+        char *tok = argv[i];
+        if (tok[0] == '-' && tok[1] != '\0') {
+            opts.push_back(tok);
+            // If this option takes a separate argument, pull in the next token.
+            for (int j = 1; tok[j]; j++) {
+                const char *p = strchr(optstring, tok[j]);
+                bool takesArg = (p != NULL && *(p + 1) == ':');
+                if (takesArg) {
+                    if (tok[j + 1] == '\0' && i + 1 < argc) {
+                        opts.push_back(argv[++i]);   // arg is the next token
+                    }
+                    break;                            // else arg is attached
+                }
+            }
+        } else {
+            operands.push_back(tok);                  // conf file or "-"
+        }
+    }
+    int k = 1;
+    for (char *o : opts)     argv[k++] = o;
+    for (char *o : operands) argv[k++] = o;
+}
 
 void help()
 {
@@ -64,7 +96,10 @@ int main(int argc, char *argv[])
     double fitStep = 10;
     int fitTarget = 1;
 
-    while ((index = getopt(argc, argv, "hvs:d:r:pmA:CO:j:d:o:b:R:D:t:Sci:g:N:")) != -1) {
+    const char *optstring = "hvs:d:r:pmA:CO:j:d:o:b:R:D:t:Sci:g:N:";
+    permuteArgs(argc, argv, optstring);
+
+    while ((index = getopt(argc, argv, optstring)) != -1) {
         switch (index) {
             case 'h':
                 help();
