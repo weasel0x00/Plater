@@ -126,10 +126,39 @@ namespace Plater
             double originX = col * strideX * 1000.0;
             double originY = -row * strideY * 1000.0;
 
+            // Bake each part's positioned model (plate-local coordinates) so we
+            // can measure the combined bounding box and center it on the plate.
+            std::vector<Model> models;
+            models.reserve(plate->parts.size());
             for (auto placed : plate->parts) {
-                Model m = placed->createModel().translate(originX, originY, 0);
+                models.push_back(placed->createModel());
+            }
+
+            double minX = 0, minY = 0, maxX = 0, maxY = 0;
+            bool first = true;
+            for (auto &pm : models) {
+                Point3 lo = pm.min();
+                Point3 hi = pm.max();
+                if (first) {
+                    minX = lo.x; minY = lo.y; maxX = hi.x; maxY = hi.y;
+                    first = false;
+                } else {
+                    if (lo.x < minX) minX = lo.x;
+                    if (lo.y < minY) minY = lo.y;
+                    if (hi.x > maxX) maxX = hi.x;
+                    if (hi.y > maxY) maxY = hi.y;
+                }
+            }
+
+            // Plater packs parts into the (0,0) corner; shift so the combined
+            // bounding box is centered on the plate, then add the grid origin.
+            double shiftX = originX + plateWidth * 1000.0 / 2.0 - (minX + maxX) / 2.0;
+            double shiftY = originY + plateDepth * 1000.0 / 2.0 - (minY + maxY) / 2.0;
+
+            for (size_t k = 0; k < models.size(); k++) {
+                Model m = models[k].translate(shiftX, shiftY, 0);
                 int id = objectId++;
-                std::string name = xmlEscape(placed->getName());
+                std::string name = xmlEscape(plate->parts[k]->getName());
 
                 model << "<object id=\"" << id << "\" type=\"model\" name=\""
                       << name << "\">";

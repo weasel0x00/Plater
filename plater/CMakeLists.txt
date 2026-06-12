@@ -70,3 +70,10 @@ endif()
 target_link_libraries(plater libplater)
 
 install(TARGETS plater RUNTIME DESTINATION bin)
+
+# Prototype: bit-packed collision benchmark (not installed)
+add_executable(bench_overlap bench_overlap.cpp)
+if(NOT MSVC)
+  target_compile_options(bench_overlap PRIVATE -std=c++11 -O2)
+endif()
+target_link_libraries(bench_overlap libplater)

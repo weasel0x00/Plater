@@ -10,7 +10,8 @@ using namespace std;
 namespace Plater
 {
     Bitmap::Bitmap(int width_, int height_)
-        : width(width_), height(height_), sX(0), sY(0), pixels(0), data(NULL)
+        : width(width_), height(height_), sX(0), sY(0), pixels(0), data(NULL),
+          maskWords(0), maskValid(false)
     {
         data = new unsigned char[width*height];
         centerX = width/2;
@@ -27,6 +28,8 @@ namespace Plater
     {
         width = other->width;
         height = other->height;
+        maskWords = 0;
+        maskValid = false;
         data = new unsigned char[width*height];
 
         for (int x=0; x<width; x++) {
@@ -165,12 +168,65 @@ namespace Plater
         }
     }
 
-    bool Bitmap::overlaps(const Bitmap *other, int offx, int offy)
+    void Bitmap::ensureMask() const
+    {
+        if (maskValid) {
+            return;
+        }
+        maskWords = (width + 63) / 64;
+        mask.assign((size_t)maskWords * (height > 0 ? height : 0), 0ULL);
+        for (int y=0; y<height; y++) {
+            uint64_t *row = &mask[(size_t)y * maskWords];
+            for (int x=0; x<width; x++) {
+                if (data[BMP_POSITION(x,y)]) {
+                    row[x >> 6] |= (uint64_t)1 << (x & 63);
+                }
+            }
+        }
+        maskValid = true;
+    }
+
+    bool Bitmap::overlapsScalar(const Bitmap *other, int offx, int offy) const
     {
         for (int x=0; x<width; x++) {
             for (int y=0; y<height; y++) {
                 if (getPoint(x, y) && other->getPoint(x+offx, y+offy)) {
                     return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    bool Bitmap::overlaps(const Bitmap *other, int offx, int offy)
+    {
+        ensureMask();
+        other->ensureMask();
+
+        const int ow = other->maskWords;
+        const int wordShift = offx >> 6;   // whole 64-pixel words to shift
+        const int bitShift  = offx & 63;   // sub-word bit shift
+
+        for (int y=0; y<height; y++) {
+            const uint64_t *prow = &mask[(size_t)y * maskWords];
+            const uint64_t *qrow = &other->mask[(size_t)(y + offy) * ow];
+
+            for (int w=0; w<maskWords; w++) {
+                uint64_t pbits = prow[w];
+                if (!pbits) {
+                    continue;
+                }
+                // This part word lands on plate word (w + wordShift), straddling
+                // into the next plate word when bitShift != 0.
+                int qw = w + wordShift;
+                if (qw < ow && (qrow[qw] & (pbits << bitShift))) {
+                    return true;
+                }
+                if (bitShift) {
+                    int qw1 = qw + 1;
+                    if (qw1 < ow && (qrow[qw1] & (pbits >> (64 - bitShift)))) {
+                        return true;
+                    }
                 }
             }
         }
