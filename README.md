@@ -32,6 +32,14 @@ Alternate mirror:
 
 ## With the GUI
 
+> **Note: the GUI is unmaintained.** It still builds and runs with the original
+> options (plate size, spacing, precision, sort mode, random iterations), but it
+> does **not** expose any of the newer placement features added to the command
+> line — the algorithm selector (`-A`, including `anneal`), area balancing
+> (`-B`), parallel chains (`-t`), tall-part centring (`-T`), the consolidation
+> pass (`-C`), and the fit/shrink size searches (`-i` / `-z`). For any of those,
+> use the command line. There are no plans to update the GUI.
+
 To make a plate, first load your STL files. Click "Add Part(s)" button and select
 one or more `.stl` file.
 
@@ -291,6 +299,12 @@ make
 This will create for you the libplater and the plater command tool
 
 ## GUI
+
+> **Unmaintained.** These instructions are stale (Qt 4.8 / `qmake`), while the
+> CMake build expects Qt5, so the GUI may not build as written on a current
+> system. The command-line tool above is the maintained path and the only one
+> that exposes the newer placement features. The GUI links the same `libplater`,
+> so it still works for basic plating if you can get it to build.
 
 First, install Qt 4.8.0. Then, be sure you built plater in `plater/build/`.
 
