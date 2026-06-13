@@ -31,6 +31,11 @@ namespace Plater
             virtual ~Placer();
 
             void sortParts(int sortType);
+            // Arrange the placement queue to follow an explicit order: order[i]
+            // is the index (into this placer's expanded part list) of the part
+            // placed i-th. Used by the simulated-annealing search, which treats
+            // the placement order as the variable to optimise.
+            void setOrder(const std::vector<int> &order);
             void setGravityMode(int gravityMode);
             void setRotateDirection(int direction);
             void setRotateOffset(int offset);

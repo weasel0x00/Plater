@@ -111,6 +111,32 @@ namespace Plater
             // brute force (fills holes/cavities) but with score-based pruning.
             bool prunedBrute;
 
+            // Simulated-annealing search: instead of enumerating a fixed set of
+            // sort orders, search over part orderings (and gravity/rotation
+            // config), re-running the greedy placer on each candidate and
+            // keeping the densest packing found. Quality-first, not speed-first.
+            bool anneal;
+            // Wall-clock budget for the annealing search, in seconds. Larger
+            // budgets explore more orderings and pack tighter.
+            double annealTime;
+
+            // Balance pass for -A anneal: once the minimum plate count is found
+            // (and it is >1), run a second annealing phase that, without using
+            // more plates, evens out the total part area across the plates so
+            // none is left sparse. Off by default (dense packing).
+            bool balance;
+
+            // Search part orderings with simulated annealing and store the best
+            // packing in `solution`. Seeded from the largest-first greedy result
+            // so it never does worse than the brute-force algorithm.
+            void solveAnneal();
+
+            // Arrange the parts within `target` plates with the taller parts
+            // pulled toward each plate's centre and balanced across plates (the
+            // -T layout). Returns the chosen solution, or NULL if no centred
+            // layout fits in `target` plates. Shared by solve() and solveAnneal().
+            Solution *tallCenterWithin(int target);
+
             // Post-pass: try to empty the sparsest plate by re-placing its
             // parts into the gaps of the others; kept only if plates drop.
             bool consolidate;

@@ -1,6 +1,10 @@
 #define _USE_MATH_DEFINES
 #include <set>
 #include <algorithm>
+#include <chrono>
+#include <random>
+#include <functional>
+#include <thread>
 #include <math.h>
 #include <sstream>
 #include <fstream>
@@ -44,7 +48,10 @@ namespace Plater
         contact(false),
         prunedBrute(false),
         consolidate(false),
-        tallCenter(false)
+        tallCenter(false),
+        anneal(false),
+        annealTime(30.0),
+        balance(false)
     {
     }
 
@@ -366,6 +373,14 @@ namespace Plater
             _log("- Plate size: %g microm (circle)\n", plateDiameter);
         }
 
+        if (anneal) {
+            solveAnneal();
+            if (!cancel && solution != NULL) {
+                plates = solution->countPlates();
+            }
+            return;
+        }
+
         // Build the normal (dense) placers and find the minimum plate count.
         vector<Placer*> placers;
         int lastSort;
@@ -405,34 +420,10 @@ namespace Plater
 
         if (tallCenter && dense != NULL) {
             // Keep the dense plate count, but try to centre the tall parts
-            // within it, balanced across the plates. Accept the centred layout
-            // only if it fits in the same number of plates -- fewer plates
-            // always beats centring.
+            // within it. Accept it only if it fits the same number of plates --
+            // fewer plates always beats centring.
             int target = dense->countPlates();
-            Solution *chosen = NULL;
-            // Prefer centred-and-balanced; if that needs more plates, fall back
-            // to dense-but-balanced (tall parts still spread across plates);
-            // failing that, keep the plain dense packing. Plate count never
-            // exceeds the dense minimum.
-            const bool tryCenter[2] = { true, false };
-            for (int t=0; t<2 && chosen==NULL && !cancel; t++) {
-                for (int ro=0; ro<2 && chosen==NULL && !cancel; ro++) {
-                    for (int rd=0; rd<2 && chosen==NULL && !cancel; rd++) {
-                        Placer pc(this);
-                        pc.sortParts(PLACER_SORT_HEIGHT_DEC);
-                        pc.setRotateOffset(ro);
-                        pc.setRotateDirection(rd);
-                        Solution *c = pc.placeCenterBalanced(target, tryCenter[t]);
-                        if (c != NULL && c->countPlates() <= target) {
-                            chosen = c;
-                            _log("- Tall parts %s within %d plate(s)\n",
-                                    tryCenter[t] ? "centred & balanced" : "balanced", target);
-                        } else if (c != NULL) {
-                            delete c;
-                        }
-                    }
-                }
-            }
+            Solution *chosen = tallCenterWithin(target);
             if (chosen != NULL) {
                 solution = chosen;
                 delete dense;
@@ -447,6 +438,328 @@ namespace Plater
         if (!cancel && solution != NULL) {
             plates = solution->countPlates();
         }
+    }
+
+    Solution *Request::tallCenterWithin(int target)
+    {
+        // Prefer centred-and-balanced; if that needs more plates, fall back to
+        // dense-but-balanced (tall parts still spread across plates). Returns
+        // NULL if neither fits in `target` plates (caller keeps its packing).
+        const bool tryCenter[2] = { true, false };
+        for (int t=0; t<2 && !cancel; t++) {
+            for (int ro=0; ro<2 && !cancel; ro++) {
+                for (int rd=0; rd<2 && !cancel; rd++) {
+                    Placer pc(this);
+                    pc.sortParts(PLACER_SORT_HEIGHT_DEC);
+                    pc.setRotateOffset(ro);
+                    pc.setRotateDirection(rd);
+                    Solution *c = pc.placeCenterBalanced(target, tryCenter[t]);
+                    if (c != NULL && c->countPlates() <= target) {
+                        _log("- Tall parts %s within %d plate(s)\n",
+                                tryCenter[t] ? "centred & balanced" : "balanced", target);
+                        return c;
+                    } else if (c != NULL) {
+                        delete c;
+                    }
+                }
+            }
+        }
+        return NULL;
+    }
+
+    void Request::solveAnneal()
+    {
+        // Canonical instance list, expanded in the SAME order Placer's
+        // constructor walks request->quantities. A permutation of [0,N) then
+        // maps 1:1 onto a placer's part queue via Placer::setOrder().
+        std::vector<Part*> insts;
+        for (auto &q : quantities) {
+            for (int i=0; i<q.second; i++) {
+                insts.push_back(parts[q.first]);
+            }
+        }
+        const int N = (int)insts.size();
+        if (N == 0) {
+            solution = NULL;
+            return;
+        }
+
+        // A search state is an ordering plus the discrete placement config the
+        // greedy already understands (gravity bias + rotation enumeration).
+        struct Config { int gravity, rotOffset, rotDir; };
+
+        // Evaluate a candidate ordering with the existing greedy placer. `cap`
+        // bounds the plate count (0 = uncapped); a capped run that doesn't fit
+        // returns NULL.
+        auto evaluate = [&](const std::vector<int> &order, const Config &c,
+                            int cap) -> Solution* {
+            Placer *p = new Placer(this);
+            p->setOrder(order);
+            p->setGravityMode(c.gravity);
+            p->setRotateOffset(c.rotOffset);
+            p->setRotateDirection(c.rotDir);
+            if (cap > 0) {
+                p->setMaxPlates(cap);
+            }
+            Solution *s = p->place();   // NULL only when capped and it won't fit
+            delete p;                   // queue consumed into `s`
+            return s;
+        };
+
+        // Per-plate "load" = the sum of its parts' surface areas. The balancing
+        // phase drives these toward equality. Returned as a coefficient of
+        // variation: 0 == perfectly balanced, scale-free across part sets.
+        auto imbalance = [&](Solution *s) -> double {
+            int n = s->countPlates();
+            if (n < 2) {
+                return 0.0;
+            }
+            std::vector<double> area(n, 0.0);
+            double mean = 0;
+            for (int i=0; i<n; i++) {
+                for (auto pp : s->getPlate(i)->parts) {
+                    area[i] += pp->getSurface();
+                }
+                mean += area[i];
+            }
+            mean /= n;
+            if (mean <= 0) {
+                return 0.0;
+            }
+            double var = 0;
+            for (double a : area) {
+                var += (a-mean)*(a-mean);
+            }
+            return sqrt(var/n) / mean;
+        };
+
+        // Result of one annealing chain: the best packing it found plus the
+        // ordering/config that produced it (for the next phase to reuse).
+        struct ChainResult {
+            Solution *sol;
+            std::vector<int> order;
+            Config config;
+            float score;
+            long iters;
+        };
+
+        // One simulated-annealing chain with its own RNG (seeded from `seed`, so
+        // parallel chains explore different trajectories). Minimises `objective`
+        // (lower is better), keeping the single best Solution seen. Returns a
+        // NULL sol only when the seed itself is infeasible under `cap`.
+        auto runChain = [&](unsigned seed, std::function<float(Solution*)> objective,
+                            int cap, std::vector<int> curOrder, Config curConfig,
+                            double budget, double T0, double Tmin,
+                            bool logProgress, const char *label) -> ChainResult
+        {
+            std::mt19937 rng(seed);
+            std::uniform_real_distribution<double> unit(0.0, 1.0);
+            auto randIdx = [&](int n){ return (int)(unit(rng) * n) % n; };
+
+            Solution *best = evaluate(curOrder, curConfig, cap);
+            if (best == NULL) {
+                return ChainResult{NULL, curOrder, curConfig, 0.0f, 0};
+            }
+            float bestScore = objective(best);
+            float curScore = bestScore;
+            std::vector<int> bestOrder = curOrder;
+            Config bestConfig = curConfig;
+            long iters = 0;
+
+            // Geometric cooling over the wall-clock budget: early moves explore
+            // freely, late moves behave near-greedily. (Nothing to permute or no
+            // budget -> just return the seed.)
+            if (N >= 2 && budget > 0) {
+                auto startTime = std::chrono::steady_clock::now();
+                while (!cancel) {
+                    double elapsed = std::chrono::duration<double>(
+                            std::chrono::steady_clock::now() - startTime).count();
+                    if (elapsed >= budget) {
+                        break;
+                    }
+                    double T = T0 * pow(Tmin/T0, elapsed/budget);
+
+                    // Propose a neighbour: perturb the order, or nudge the config.
+                    std::vector<int> nbOrder = curOrder;
+                    Config nbConfig = curConfig;
+                    int move = randIdx(4);
+                    if (move == 3) {
+                        switch (randIdx(3)) {
+                            case 0: nbConfig.gravity   = randIdx(PLACER_GRAVITY_EQ+1); break;
+                            case 1: nbConfig.rotOffset = randIdx(2); break;
+                            case 2: nbConfig.rotDir    = randIdx(2); break;
+                        }
+                    } else {
+                        int i = randIdx(N), j = randIdx(N);
+                        while (j == i) {
+                            j = randIdx(N);
+                        }
+                        if (move == 0) {                 // swap two positions
+                            std::swap(nbOrder[i], nbOrder[j]);
+                        } else if (move == 1) {          // move one part to a new slot
+                            int v = nbOrder[i];
+                            nbOrder.erase(nbOrder.begin()+i);
+                            nbOrder.insert(nbOrder.begin()+j, v);
+                        } else {                          // reverse a segment
+                            if (i > j) std::swap(i, j);
+                            std::reverse(nbOrder.begin()+i, nbOrder.begin()+j+1);
+                        }
+                    }
+
+                    Solution *cand = evaluate(nbOrder, nbConfig, cap);
+                    iters++;
+                    if (cand == NULL) {
+                        continue;   // infeasible under the cap: reject the move
+                    }
+                    float candScore = objective(cand);
+
+                    // Keep the single best packing this chain has seen.
+                    if (candScore < bestScore) {
+                        delete best;
+                        best = cand;
+                        bestScore = candScore;
+                        bestOrder = nbOrder;
+                        bestConfig = nbConfig;
+                        if (logProgress) {
+                            _log("- [%s] new best: %d plates, objective %g @%.1fs\n",
+                                    label, best->countPlates(), bestScore, elapsed);
+                        }
+                    } else {
+                        delete cand;   // not the best; only its order/score lives on
+                    }
+
+                    // Metropolis acceptance drives the random walk's current state.
+                    float delta = candScore - curScore;
+                    if (delta <= 0 || unit(rng) < exp(-delta/T)) {
+                        curOrder.swap(nbOrder);
+                        curConfig = nbConfig;
+                        curScore = candScore;
+                    }
+                }
+            }
+            return ChainResult{best, bestOrder, bestConfig, bestScore, iters};
+        };
+
+        // Run `nbThreads` independent chains concurrently and return the best
+        // result (freeing the rest). Each evaluate() builds its own Placer over
+        // read-only Part bitmaps, so concurrent placement is safe.
+        auto runParallel = [&](std::function<float(Solution*)> objective, int cap,
+                               std::vector<int> seedOrder, Config seedConfig,
+                               double budget, double T0, double Tmin,
+                               const char *label) -> ChainResult
+        {
+            int chains = (nbThreads < 1) ? 1 : (int)nbThreads;
+            std::vector<ChainResult> results(chains);
+            if (chains == 1) {
+                results[0] = runChain(0x9e3779b9u, objective, cap, seedOrder,
+                        seedConfig, budget, T0, Tmin, true, label);
+            } else {
+                std::vector<std::thread> threads;
+                for (int c=0; c<chains; c++) {
+                    threads.emplace_back([&,c]() {
+                        results[c] = runChain(0x9e3779b9u + 0x100u*(unsigned)c,
+                                objective, cap, seedOrder, seedConfig,
+                                budget, T0, Tmin, false, label);
+                    });
+                }
+                for (auto &th : threads) {
+                    th.join();
+                }
+            }
+
+            // Keep the lowest-objective feasible chain; free the others.
+            int bestIdx = -1;
+            long totIters = 0;
+            for (int c=0; c<chains; c++) {
+                totIters += results[c].iters;
+                if (results[c].sol == NULL) {
+                    continue;
+                }
+                if (bestIdx < 0 || results[c].score < results[bestIdx].score) {
+                    bestIdx = c;
+                }
+            }
+            if (bestIdx < 0) {
+                _log("- [%s] no feasible packing in %d chain(s)\n", label, chains);
+                return ChainResult{NULL, seedOrder, seedConfig, 0.0f, totIters};
+            }
+            for (int c=0; c<chains; c++) {
+                if (c != bestIdx && results[c].sol != NULL) {
+                    delete results[c].sol;
+                }
+            }
+            _log("- [%s] %d chain(s), %ld iterations, best %d plates (objective %g)\n",
+                    label, chains, totIters, results[bestIdx].sol->countPlates(),
+                    results[bestIdx].score);
+            return results[bestIdx];
+        };
+
+        // Seed largest-surface-first (the proven greedy default) so annealing
+        // starts from at-least-brute quality and can only improve on it.
+        std::vector<int> seedOrder(N);
+        for (int i=0; i<N; i++) {
+            seedOrder[i] = i;
+        }
+        std::stable_sort(seedOrder.begin(), seedOrder.end(), [&](int a, int b){
+            return insts[a]->getSurface() > insts[b]->getSurface();
+        });
+        Config seedConfig{PLACER_GRAVITY_YX, 0, 0};
+
+        int chains = (nbThreads < 1) ? 1 : (int)nbThreads;
+        _log("* Annealing (%d parts, %.0fs budget, %d chain(s)%s%s)\n",
+                N, annealTime, chains,
+                (balance && !tallCenter) ? ", +balance" : "",
+                tallCenter ? ", +tall-centre" : "");
+
+        // Phase 1: minimise the plate count. score() also empties the trailing
+        // plate, which is what lets a plate be dropped entirely.
+        ChainResult r1 = runParallel([](Solution *s){ return s->score(); }, 0,
+                seedOrder, seedConfig, annealTime, 1.0, 0.01, "min-plates");
+        Solution *result = r1.sol;
+
+        // Phase 2 (optional, -B): with the plate count fixed at the phase-1
+        // minimum, even out the surface area across plates so none is left
+        // sparse. The cap forbids using more plates; a large bonus still rewards
+        // ever using fewer (dropping a plate always beats balancing). Skipped
+        // under -T, which re-derives the whole layout (and already spreads the
+        // tall parts across plates).
+        if (balance && !tallCenter && result != NULL && result->countPlates() > 1) {
+            int P = result->countPlates();
+            auto balanceObj = [&,P](Solution *s) -> float {
+                double v = imbalance(s);
+                if (s->countPlates() < P) {
+                    v -= 1000.0;
+                }
+                return (float)v;
+            };
+            ChainResult r2 = runParallel(balanceObj, P, r1.order, r1.config,
+                    annealTime, 0.2, 0.002, "balance");
+            if (r2.sol != NULL) {
+                _log("- Balanced %d plates: area spread %.1f%% -> %.1f%% (CoV)\n",
+                        P, 100.0*imbalance(result), 100.0*imbalance(r2.sol));
+                delete result;
+                result = r2.sol;
+            }
+        } else if (balance && tallCenter) {
+            _log("- Note: -T re-arranges within the minimum plates; -B skipped\n");
+        }
+
+        // Phase T (optional, -T): centre the taller parts within the final plate
+        // count, reusing the same logic as the non-anneal path. Anneal's role
+        // here is to have found the minimum plate count to centre within.
+        if (tallCenter && result != NULL) {
+            int target = result->countPlates();
+            Solution *tc = tallCenterWithin(target);
+            if (tc != NULL) {
+                delete result;
+                result = tc;
+            } else {
+                _log("- Keeping anneal %d-plate packing (no centred layout fit)\n",
+                        target);
+            }
+        }
+
+        solution = result;
     }
 
     Solution *Request::runPlacers(std::vector<Placer*> &placers)

@@ -68,6 +68,19 @@ namespace Plater
         }
     }
 
+    void Placer::setOrder(const std::vector<int> &order)
+    {
+        // place() pops the queue from the back (getNextPart), so the part to be
+        // placed first must sit last. Build the queue reversed relative to the
+        // requested placement order.
+        std::vector<PlacedPart *> reordered;
+        reordered.reserve(order.size());
+        for (int i=(int)order.size()-1; i>=0; i--) {
+            reordered.push_back(parts[order[i]]);
+        }
+        parts = reordered;
+    }
+
     PlacedPart *Placer::getNextPart()
     {
         PlacedPart *part = parts.back();

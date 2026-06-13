@@ -128,6 +128,35 @@ selects an alternative, and `-C` adds a consolidation pass:
       only; falls back to brute for circular beds.
     * `contact` — `skyline` with max-contact scoring (denser placement). Same
       no-hole-filling limitation as `skyline`.
+    * `anneal` — simulated-annealing search over part orderings. The other
+      algorithms place the parts in a fixed (largest-first) order; `anneal`
+      instead searches *which order* to place them in — and which gravity and
+      rotation bias to use — re-running the hole-aware brute-force placer on each
+      candidate ordering and keeping the densest packing found. It is seeded from
+      the largest-first result, so it is **never worse than `brute`**, only
+      slower. This is the quality-first option: it trades CPU time (set with
+      `-e`) for tighter packing. Pair it with finer `-r`/`-d` for the tightest
+      results. Hole-aware (uses `brute` internally) and works on rectangular and
+      circular beds.
+* `-e seconds`, wall-clock time budget for the `anneal` search (default `30`).
+  Larger budgets explore more orderings and pack tighter; it stops at the budget
+  and keeps the best packing seen so far, so you can stop it any time. No effect
+  unless `-A anneal` is selected.
+* `-B`, balance pass for `-A anneal`. By default `anneal` packs densely, which
+  can leave the last plate sparse (e.g. two full plates and a third with only a
+  few parts). With `-B`, once the minimum plate count is found — and only if it
+  is **more than one plate** — a second annealing phase redistributes the parts
+  so the **total part area is roughly equal across all plates**, *without ever
+  using more plates than the minimum*. Balance is measured as the spread
+  (coefficient of variation) of the summed part surface areas per plate, so it
+  evens out material/part area rather than part counts. Only meaningful with
+  `-A anneal`; it runs a second search of the same `-e` budget. If `-T` is also
+  given, `-T` wins (it re-derives the layout) and the balance pass is skipped.
+
+  `-A anneal` also honours two existing options: `-t threads` runs that many
+  independent annealing chains in parallel and keeps the best (more chains =
+  more exploration at the *same* wall-clock budget), and `-T` centres the tall
+  parts within the plate count the search found (see `-T` below).
 * `-C`, consolidation pass. After placing, try to drop a plate by re-packing all
   parts into one fewer plate (exploring several part orderings); the result is
   kept only if it strictly reduces the plate count, so it never makes things

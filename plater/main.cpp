@@ -73,6 +73,13 @@ void help()
     cerr << "     pruned   - hole-aware pruned brute force (same packing as brute, faster)" << endl;
     cerr << "     skyline  - skyline bottom-left drop (fastest; no hole filling; rectangular plates)" << endl;
     cerr << "     contact  - skyline with max-contact scoring (denser; no hole filling)" << endl;
+    cerr << "     anneal   - simulated-annealing search over part orderings (quality-first," << endl;
+    cerr << "                slowest; never worse than brute; tune with -e, -r/-d, -t, -B, -T)" << endl;
+    cerr << "-e seconds: time budget for the anneal search (default 30; larger packs tighter)" << endl;
+    cerr << "            -t N runs N anneal chains in parallel (best kept); -T centres tall" << endl;
+    cerr << "            parts within the plate count found" << endl;
+    cerr << "-B: (anneal) balance pass - spread part area evenly across plates when the" << endl;
+    cerr << "    minimum is >1 plate, so no plate is left sparse (runs a 2nd anneal phase)" << endl;
     cerr << "-C: consolidation pass - try to empty the sparsest plate into the others' gaps" << endl;
     cerr << "-T: place taller parts toward the centre of the plate (helps print reliability)" << endl;
     cerr << "Fit search (grow the plate from an ideal size up to the bed size -b):" << endl;
@@ -97,7 +104,7 @@ int main(int argc, char *argv[])
     double fitStep = 10;
     int fitTarget = 1;
 
-    const char *optstring = "hvs:d:r:pmA:CTO:j:d:o:b:R:D:t:Sci:g:N:";
+    const char *optstring = "hvs:d:r:pmA:CTO:j:d:o:b:R:D:t:Sci:g:N:e:B";
     permuteArgs(argc, argv, optstring);
 
     while ((index = getopt(argc, argv, optstring)) != -1) {
@@ -134,9 +141,11 @@ int main(int argc, char *argv[])
                 } else if (algo == "contact") {
                     request.skyline = true;
                     request.contact = true;
+                } else if (algo == "anneal") {
+                    request.anneal = true;
                 } else {
                     cerr << "Unknown algorithm '" << algo
-                         << "' (expected: brute, pruned, skyline, contact)" << endl;
+                         << "' (expected: brute, pruned, skyline, contact, anneal)" << endl;
                     help();
                 }
                 break;
@@ -204,6 +213,12 @@ int main(int argc, char *argv[])
                 break;
             case 'N':
                 fitTarget = atoi(optarg);
+                break;
+            case 'e':
+                request.annealTime = atof(optarg);
+                break;
+            case 'B':
+                request.balance = true;
                 break;
         }
     }
