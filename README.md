@@ -66,10 +66,21 @@ Here are the options:
 * `-b size`, the size of the bedplate (in 2D, top view), in mm (default `150`). A
   single value (e.g. `-b 300`) is a square bed; use `AxB` (e.g. `-b 300x200`) for
   a rectangular bed.
+* `-D diameter`, set a circular bed of the given diameter, in mm (instead of the
+  rectangular `-b`).
 * `-j precision`, precision, in mm (default `0.5`)
 * `-s spacing`, parts spacing, in mm (default `2`)
 * `-d delta`, sets the spacing of the brute forcing (see below), default `2`mm
 * `-r rotation`, sets the angle of the brute forcing, default `90`°
+* `-S`, try multiple sort possibilities. Instead of placing once with a single
+  ordering (largest-area first), the placer runs over many part orderings —
+  largest-first, smallest-first, and several randomly shuffled ones — and keeps
+  the result with the fewest plates. A broader search (often tighter packing) at
+  the cost of more runtime.
+* `-R n`, number of random shuffled-order iterations to try (default `3`). Only
+  has an effect together with `-S`; more iterations search harder but run slower.
+* `-t threads`, number of placement threads to run in parallel (default `1`).
+* `-c`, also write a `plates.csv` describing each plate's parts and positions.
 * `-p`, will output .ppm files instead of STLs
 * `-m`, will output a single `.3mf` file containing every plate instead of one
   STL per plate, using the OrcaSlicer / BambuStudio multi-plate project layout.
