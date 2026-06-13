@@ -116,12 +116,14 @@ selects an alternative, and `-C` adds a consolidation pass:
   kept only if it strictly reduces the plate count, so it never makes things
   worse. Useful when a single-sort run leaves a sparse trailing plate; redundant
   with the broader search of `-S`.
-* `-T`, place taller parts toward the centre of the plate. Parts are placed
-  tallest-first, each seeking the plate centre, so tall parts cluster in the
-  middle and shorter parts fill outward — often more reliable to print (better
-  cooling/adhesion symmetry, less risk from edge drafts). Uses full-scan,
-  centre-seeking placement (overrides `-A`), so packing may be a little less
-  dense than the corner-packing default.
+* `-T`, bias taller parts toward the centre of the plate (often more reliable to
+  print — better cooling/adhesion symmetry, less risk from edge drafts). It first
+  finds the minimum number of plates with the normal packing, then, **without
+  exceeding that plate count**, spreads the tall parts evenly across the plates
+  and pulls them toward each plate's centre. When the plates are full there may
+  not be room to centre them — in that case the tall parts are still balanced
+  across the plates (corner-packed). Fewer plates always takes priority over
+  centring.
 
 ## Fit search (ideal plate size)
 

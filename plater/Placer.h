@@ -41,6 +41,12 @@ namespace Plater
 
             PlacedPart *getNextPart();
             Solution *place();
+            // Place tallest-first across exactly nPlates, spreading the tall
+            // parts evenly over the plates. With useCenter, tall parts seek the
+            // plate centre (looser packing); otherwise they corner-pack like
+            // the rest (denser). Returns NULL if the parts don't fit in
+            // nPlates. Used for -T.
+            Solution *placeCenterBalanced(int nPlates, bool useCenter);
             void placeThreaded();
             Solution *solution;
 

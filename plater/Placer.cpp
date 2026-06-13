@@ -437,7 +437,92 @@ namespace Plater
         this->solution = solution;
         return solution;
     }
-            
+
+    Solution *Placer::placeCenterBalanced(int nPlates, bool useCenter)
+    {
+        Solution *sol = new Solution(request->plateWidth, request->plateHeight,
+                request->plateDiameter, request->plateMode, request->precision);
+        for (int i=0; i<nPlates; i++) {
+            sol->addPlate();
+        }
+
+        // Classify parts: "tall" = above the average part height. Tall parts
+        // are spread across the plates (balanced) and centre-seeking; the rest
+        // are corner-packed densely (the normal gravity score), filling around
+        // the tall parts. This keeps the packing dense enough to stay within
+        // nPlates while still putting the tall parts in the middle.
+        float sumH = 0;
+        for (auto p : parts) {
+            sumH += p->getHeight();
+        }
+        float avgH = parts.empty() ? 0 : sumH / parts.size();
+
+        std::vector<int> tallCount(nPlates, 0);
+        bool failed = false;
+
+        while (parts.size() && !failed) {
+            PlacedPart *part = getNextPart();   // tallest remaining
+            bool isTall = part->getHeight() > avgH;
+            bool placed = false;
+
+            if (isTall) {
+                // Send tall parts to the plate with the fewest tall parts so
+                // they spread evenly; centre-seek when requested.
+                scoreMode = useCenter ? PLACER_SCORE_CENTER : PLACER_SCORE_GRAVITY;
+                std::vector<int> order(nPlates);
+                for (int i=0; i<nPlates; i++) {
+                    order[i] = i;
+                }
+                std::sort(order.begin(), order.end(),
+                        [&](int a, int b){ return tallCount[a] < tallCount[b]; });
+                for (int p : order) {
+                    if (placePart(sol->getPlate(p), part)) {
+                        tallCount[p]++;
+                        placed = true;
+                        break;
+                    }
+                }
+                if (!placed && useCenter) {
+                    // Centred placement didn't fit; clear the "can't fit" marks
+                    // so the dense fallback below gets a fresh look.
+                    for (int p=0; p<nPlates; p++) {
+                        cache[sol->getPlate(p)].erase(part->getName());
+                    }
+                }
+            }
+
+            if (!placed) {
+                // Dense corner placement (first-fit). Keeps the layout within
+                // nPlates even when a part can't be centred.
+                scoreMode = PLACER_SCORE_GRAVITY;
+                for (int p=0; p<nPlates; p++) {
+                    if (placePart(sol->getPlate(p), part)) {
+                        placed = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!placed) {
+                delete part;
+                failed = true;   // doesn't fit within nPlates at all
+            }
+        }
+
+        if (failed) {
+            for (auto p : parts) {
+                delete p;
+            }
+            parts.clear();
+            delete sol;
+            this->solution = NULL;
+            return NULL;
+        }
+
+        this->solution = sol;
+        return sol;
+    }
+
     void Placer::placeThreaded()
     {
         myThread = new std::thread([this](){

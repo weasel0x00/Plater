@@ -366,58 +366,95 @@ namespace Plater
             _log("- Plate size: %g microm (circle)\n", plateDiameter);
         }
 
+        // Build the normal (dense) placers and find the minimum plate count.
         vector<Placer*> placers;
-        if (tallCenter) {
-            // Tallest parts first, each seeking the plate centre, so the tall
-            // parts cluster in the middle and shorter ones fill outward.
+        int lastSort;
+        if (sortMode == REQUEST_SINGLE_SORT) {
+            lastSort = PLACER_SORT_SURFACE_DEC;
+        } else {
+            lastSort = PLACER_SORT_SHUFFLE+randomIterations;
+        }
+        for (int sortMode=0; sortMode<=lastSort; sortMode++) {
             for (int rotateOffset=0; rotateOffset<2; rotateOffset++) {
                 for (int rotateDirection=0; rotateDirection<2; rotateDirection++) {
-                    Placer *placer = new Placer(this);
-                    placer->sortParts(PLACER_SORT_HEIGHT_DEC);
-                    placer->setScoreMode(PLACER_SCORE_CENTER);
-                    placer->setRotateDirection(rotateDirection);
-                    placer->setRotateOffset(rotateOffset);
-                    placers.push_back(placer);
-                }
-            }
-        } else {
-            int lastSort;
-            if (sortMode == REQUEST_SINGLE_SORT) {
-                lastSort = PLACER_SORT_SURFACE_DEC;
-            } else {
-                lastSort = PLACER_SORT_SHUFFLE+randomIterations;
-            }
-            for (int sortMode=0; sortMode<=lastSort; sortMode++) {
-                for (int rotateOffset=0; rotateOffset<2; rotateOffset++) {
-                    for (int rotateDirection=0; rotateDirection<2; rotateDirection++) {
-                        for (int gravity=0; gravity<PLACER_GRAVITY_EQ; gravity++) {
-                            Placer *placer = new Placer(this);
-                            placer->sortParts(sortMode);
-                            placer->setGravityMode(gravity);
-                            placer->setRotateDirection(rotateDirection);
-                            placer->setRotateOffset(rotateOffset);
-                            placers.push_back(placer);
-                        }
+                    for (int gravity=0; gravity<PLACER_GRAVITY_EQ; gravity++) {
+                        Placer *placer = new Placer(this);
+                        placer->sortParts(sortMode);
+                        placer->setGravityMode(gravity);
+                        placer->setRotateDirection(rotateDirection);
+                        placer->setRotateOffset(rotateOffset);
+                        placers.push_back(placer);
+                    }
 
-                        // Add a max-contact scored skyline placer for this
-                        // config. The solver keeps the best result, so these
-                        // only ever help.
-                        if (skyline && contact) {
-                            Placer *placer = new Placer(this);
-                            placer->sortParts(sortMode);
-                            placer->setGravityMode(PLACER_GRAVITY_YX);
-                            placer->setRotateDirection(rotateDirection);
-                            placer->setRotateOffset(rotateOffset);
-                            placer->setScoreMode(PLACER_SCORE_CONTACT);
-                            placers.push_back(placer);
-                        }
+                    // Add a max-contact scored skyline placer for this config.
+                    // The solver keeps the best result, so these only ever help.
+                    if (skyline && contact) {
+                        Placer *placer = new Placer(this);
+                        placer->sortParts(sortMode);
+                        placer->setGravityMode(PLACER_GRAVITY_YX);
+                        placer->setRotateDirection(rotateDirection);
+                        placer->setRotateOffset(rotateOffset);
+                        placer->setScoreMode(PLACER_SCORE_CONTACT);
+                        placers.push_back(placer);
                     }
                 }
             }
         }
+
+        Solution *dense = runPlacers(placers);
+
+        if (tallCenter && dense != NULL) {
+            // Keep the dense plate count, but try to centre the tall parts
+            // within it, balanced across the plates. Accept the centred layout
+            // only if it fits in the same number of plates -- fewer plates
+            // always beats centring.
+            int target = dense->countPlates();
+            Solution *chosen = NULL;
+            // Prefer centred-and-balanced; if that needs more plates, fall back
+            // to dense-but-balanced (tall parts still spread across plates);
+            // failing that, keep the plain dense packing. Plate count never
+            // exceeds the dense minimum.
+            const bool tryCenter[2] = { true, false };
+            for (int t=0; t<2 && chosen==NULL && !cancel; t++) {
+                for (int ro=0; ro<2 && chosen==NULL && !cancel; ro++) {
+                    for (int rd=0; rd<2 && chosen==NULL && !cancel; rd++) {
+                        Placer pc(this);
+                        pc.sortParts(PLACER_SORT_HEIGHT_DEC);
+                        pc.setRotateOffset(ro);
+                        pc.setRotateDirection(rd);
+                        Solution *c = pc.placeCenterBalanced(target, tryCenter[t]);
+                        if (c != NULL && c->countPlates() <= target) {
+                            chosen = c;
+                            _log("- Tall parts %s within %d plate(s)\n",
+                                    tryCenter[t] ? "centred & balanced" : "balanced", target);
+                        } else if (c != NULL) {
+                            delete c;
+                        }
+                    }
+                }
+            }
+            if (chosen != NULL) {
+                solution = chosen;
+                delete dense;
+            } else {
+                _log("- Keeping dense %d-plate packing\n", target);
+                solution = dense;
+            }
+        } else {
+            solution = dense;
+        }
+
+        if (!cancel && solution != NULL) {
+            plates = solution->countPlates();
+        }
+    }
+
+    Solution *Request::runPlacers(std::vector<Placer*> &placers)
+    {
         placersCount = placers.size();
         placerCurrent = 0;
 
+        Solution *best = NULL;
         bool stop = false;
         std::set<Placer*> workers;
 
@@ -429,6 +466,8 @@ namespace Plater
                 if (!stop && !cancel) {
                     workers.insert(placer);
                     placer->placeThreaded();
+                } else {
+                    delete placer;   // never started
                 }
             }
 
@@ -437,13 +476,13 @@ namespace Plater
                 if (placer->solution != NULL) {
                     Solution *solutionTmp = placer->solution;
 
-                    if (solution == NULL || solutionTmp->score() < solution->score()) {
-                        solution = solutionTmp;
+                    if (best == NULL || solutionTmp->score() < best->score()) {
+                        best = solutionTmp;
                     } else {
                         delete solutionTmp;
                     }
 
-                    if (solution->countPlates() == 1) {
+                    if (best->countPlates() == 1) {
                         stop = true;
                     }
 
@@ -457,13 +496,10 @@ namespace Plater
                 delete placer;
             }
 
-
             ms_sleep(50);
         }
 
-        if (!cancel && solution != NULL) {
-            plates = solution->countPlates();
-        }
+        return best;
     }
 
     void Request::consolidateSolution()

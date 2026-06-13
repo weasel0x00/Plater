@@ -20,6 +20,8 @@
 
 namespace Plater
 {
+    class Placer;
+
     class Request
     {
         public:
@@ -36,6 +38,8 @@ namespace Plater
             void process();
             // Solve only (populate `solution`), without writing output files.
             void solve();
+            // Run a set of placers concurrently and return the best solution.
+            Solution *runPlacers(std::vector<Placer*> &placers);
             // Grow the plate from an ideal size toward the configured plate
             // size (the physical maximum -W/-H), in `stepMm` increments, looking
             // for the smallest plate that fits the parts in `targetPlates`
