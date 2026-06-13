@@ -61,6 +61,7 @@ file name, the configuration will be read from standard input.
 
 Here are the options:
 
+* `-h`, display the usage/help and exit
 * `-v`, increase the verbosity, this will output more things on `stderr` during
   the placing of the parts
 * `-b size`, the size of the bedplate (in 2D, top view), in mm (default `150`). A
@@ -69,8 +70,8 @@ Here are the options:
 * `-D diameter`, set a circular bed of the given diameter, in mm (instead of the
   rectangular `-b`).
 * `-j precision`, precision, in mm (default `0.5`)
-* `-s spacing`, parts spacing, in mm (default `2`)
-* `-d delta`, sets the spacing of the brute forcing (see below), default `2`mm
+* `-s spacing`, parts spacing, in mm (default `1.5`)
+* `-d delta`, sets the spacing of the brute forcing (see below), default `1`mm
 * `-r rotation`, sets the angle of the brute forcing, default `90`°
 * `-S`, try multiple sort possibilities. Instead of placing once with a single
   ordering (largest-area first), the placer runs over many part orderings —
