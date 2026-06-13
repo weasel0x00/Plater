@@ -201,7 +201,7 @@ int main(int argc, char *argv[])
                 break;
             case 'i': {
                 // A single value is a square ideal; "WxH" (or "W,H") gives a
-                // per-axis ideal that grows toward -W/-H independently.
+                // per-axis ideal that grows toward each -b axis independently.
                 string v = string(optarg);
                 size_t sep = v.find_first_of("xX,");
                 if (sep != string::npos) {

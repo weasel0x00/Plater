@@ -41,7 +41,7 @@ namespace Plater
             // Run a set of placers concurrently and return the best solution.
             Solution *runPlacers(std::vector<Placer*> &placers);
             // Grow the plate from an ideal size toward the configured plate
-            // size (the physical maximum -W/-H), in `stepMm` increments, looking
+            // size (the physical maximum -b), in `stepMm` increments, looking
             // for the smallest plate that fits the parts in `targetPlates`
             // plates. Width and height each start at their own ideal and grow
             // toward their own maximum. Writes the chosen solution's files.
