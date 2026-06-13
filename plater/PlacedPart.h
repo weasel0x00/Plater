@@ -25,6 +25,7 @@ namespace Plater
             int getRotation();
 
             float getSurface() const;
+            float getHeight() const;
             float getGDist() const;
             float getGX() const;
             float getGY() const;

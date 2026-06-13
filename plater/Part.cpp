@@ -49,6 +49,7 @@ namespace Plater
         Point3 maxP = model.max();
         width = maxP.x-minP.x + 2*spacing;
         height = maxP.y-minP.y + 2*spacing;
+        zHeight = maxP.z-minP.z;   // print height, in the chosen orientation
 
         for (int k=1; k<bmps; k++) {
             Bitmap *rotated = Bitmap::rotate(allBmp[0], k*deltaR);

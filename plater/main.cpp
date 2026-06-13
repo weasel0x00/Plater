@@ -74,6 +74,7 @@ void help()
     cerr << "     skyline  - skyline bottom-left drop (fastest; no hole filling; rectangular plates)" << endl;
     cerr << "     contact  - skyline with max-contact scoring (denser; no hole filling)" << endl;
     cerr << "-C: consolidation pass - try to empty the sparsest plate into the others' gaps" << endl;
+    cerr << "-T: place taller parts toward the centre of the plate (helps print reliability)" << endl;
     cerr << "Fit search (grow the plate from an ideal size up to the bed size -b):" << endl;
     cerr << "  -i ideal: ideal (smallest) plate size in mm; enables the fit search." << endl;
     cerr << "            A single value is square; use WxH (e.g. 250x180) to grow each axis" << endl;
@@ -96,7 +97,7 @@ int main(int argc, char *argv[])
     double fitStep = 10;
     int fitTarget = 1;
 
-    const char *optstring = "hvs:d:r:pmA:CO:j:d:o:b:R:D:t:Sci:g:N:";
+    const char *optstring = "hvs:d:r:pmA:CTO:j:d:o:b:R:D:t:Sci:g:N:";
     permuteArgs(argc, argv, optstring);
 
     while ((index = getopt(argc, argv, optstring)) != -1) {
@@ -142,6 +143,9 @@ int main(int argc, char *argv[])
             }
             case 'C':
                 request.consolidate = true;
+                break;
+            case 'T':
+                request.tallCenter = true;
                 break;
             case 'j':
                 request.precision = atof(optarg)*1000;

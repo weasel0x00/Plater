@@ -11,14 +11,16 @@
 #define PLACER_SORT_SURFACE_DEC 0
 #define PLACER_SORT_SURFACE_INC 1
 #define PLACER_SORT_SHUFFLE     2
+#define PLACER_SORT_HEIGHT_DEC  3
 
 #define PLACER_GRAVITY_YX       0
 #define PLACER_GRAVITY_XY       1
 #define PLACER_GRAVITY_EQ       2
 
-// Candidate scoring for the skyline placer
+// Candidate scoring
 #define PLACER_SCORE_GRAVITY    0
 #define PLACER_SCORE_CONTACT    1
+#define PLACER_SCORE_CENTER     2
 
 namespace Plater
 {

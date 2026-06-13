@@ -32,6 +32,7 @@ namespace Plater
 
             float width;
             float height;
+            float zHeight;   // height in Z (print height), in the chosen orientation
             float surface;
 
             int bmps;

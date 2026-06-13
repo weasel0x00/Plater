@@ -43,7 +43,8 @@ namespace Plater
         skyline(false),
         contact(false),
         prunedBrute(false),
-        consolidate(false)
+        consolidate(false),
+        tallCenter(false)
     {
     }
 
@@ -365,35 +366,51 @@ namespace Plater
             _log("- Plate size: %g microm (circle)\n", plateDiameter);
         }
 
-        int lastSort;
-        if (sortMode == REQUEST_SINGLE_SORT) {
-            lastSort = PLACER_SORT_SURFACE_DEC;
-        } else {
-            lastSort = PLACER_SORT_SHUFFLE+randomIterations;
-        }
         vector<Placer*> placers;
-        for (int sortMode=0; sortMode<=lastSort; sortMode++) {
+        if (tallCenter) {
+            // Tallest parts first, each seeking the plate centre, so the tall
+            // parts cluster in the middle and shorter ones fill outward.
             for (int rotateOffset=0; rotateOffset<2; rotateOffset++) {
                 for (int rotateDirection=0; rotateDirection<2; rotateDirection++) {
-                    for (int gravity=0; gravity<PLACER_GRAVITY_EQ; gravity++) {
-                        Placer *placer = new Placer(this);
-                        placer->sortParts(sortMode);
-                        placer->setGravityMode(gravity);
-                        placer->setRotateDirection(rotateDirection);
-                        placer->setRotateOffset(rotateOffset);
-                        placers.push_back(placer);
-                    }
+                    Placer *placer = new Placer(this);
+                    placer->sortParts(PLACER_SORT_HEIGHT_DEC);
+                    placer->setScoreMode(PLACER_SCORE_CENTER);
+                    placer->setRotateDirection(rotateDirection);
+                    placer->setRotateOffset(rotateOffset);
+                    placers.push_back(placer);
+                }
+            }
+        } else {
+            int lastSort;
+            if (sortMode == REQUEST_SINGLE_SORT) {
+                lastSort = PLACER_SORT_SURFACE_DEC;
+            } else {
+                lastSort = PLACER_SORT_SHUFFLE+randomIterations;
+            }
+            for (int sortMode=0; sortMode<=lastSort; sortMode++) {
+                for (int rotateOffset=0; rotateOffset<2; rotateOffset++) {
+                    for (int rotateDirection=0; rotateDirection<2; rotateDirection++) {
+                        for (int gravity=0; gravity<PLACER_GRAVITY_EQ; gravity++) {
+                            Placer *placer = new Placer(this);
+                            placer->sortParts(sortMode);
+                            placer->setGravityMode(gravity);
+                            placer->setRotateDirection(rotateDirection);
+                            placer->setRotateOffset(rotateOffset);
+                            placers.push_back(placer);
+                        }
 
-                    // Add a max-contact scored skyline placer for this config.
-                    // The solver keeps the best result, so these only ever help.
-                    if (skyline && contact) {
-                        Placer *placer = new Placer(this);
-                        placer->sortParts(sortMode);
-                        placer->setGravityMode(PLACER_GRAVITY_YX);
-                        placer->setRotateDirection(rotateDirection);
-                        placer->setRotateOffset(rotateOffset);
-                        placer->setScoreMode(PLACER_SCORE_CONTACT);
-                        placers.push_back(placer);
+                        // Add a max-contact scored skyline placer for this
+                        // config. The solver keeps the best result, so these
+                        // only ever help.
+                        if (skyline && contact) {
+                            Placer *placer = new Placer(this);
+                            placer->sortParts(sortMode);
+                            placer->setGravityMode(PLACER_GRAVITY_YX);
+                            placer->setRotateDirection(rotateDirection);
+                            placer->setRotateOffset(rotateOffset);
+                            placer->setScoreMode(PLACER_SCORE_CONTACT);
+                            placers.push_back(placer);
+                        }
                     }
                 }
             }
@@ -466,19 +483,28 @@ namespace Plater
             int target = solution->countPlates() - 1;
 
             std::vector<int> orderings;
-            orderings.push_back(PLACER_SORT_SURFACE_DEC);
-            orderings.push_back(PLACER_SORT_SURFACE_INC);
-            for (int s=0; s<16; s++) {
-                orderings.push_back(PLACER_SORT_SHUFFLE);
+            if (tallCenter) {
+                // Keep the centre bias; vary rotation for a little diversity.
+                orderings.push_back(PLACER_SORT_HEIGHT_DEC);
+                orderings.push_back(PLACER_SORT_HEIGHT_DEC);
+            } else {
+                orderings.push_back(PLACER_SORT_SURFACE_DEC);
+                orderings.push_back(PLACER_SORT_SURFACE_INC);
+                for (int s=0; s<16; s++) {
+                    orderings.push_back(PLACER_SORT_SHUFFLE);
+                }
             }
 
-            for (int ordering : orderings) {
+            for (size_t oi=0; oi<orderings.size(); oi++) {
                 Placer placer(this);
                 placer.setMaxPlates(target);
-                placer.sortParts(ordering);
+                placer.sortParts(orderings[oi]);
                 placer.setGravityMode(PLACER_GRAVITY_YX);
                 placer.setRotateOffset(0);
-                placer.setRotateDirection(0);
+                placer.setRotateDirection((int)oi & 1);
+                if (tallCenter) {
+                    placer.setScoreMode(PLACER_SCORE_CENTER);
+                }
 
                 Solution *candidate = placer.place();
                 if (candidate != NULL && candidate->countPlates() <= target) {

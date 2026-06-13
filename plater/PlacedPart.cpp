@@ -37,6 +37,11 @@ namespace Plater
     {
         return part->getSurface();
     }
+
+    float PlacedPart::getHeight() const
+    {
+        return part->zHeight;
+    }
             
     float PlacedPart::getGDist() const
     {

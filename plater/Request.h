@@ -111,6 +111,10 @@ namespace Plater
             // parts into the gaps of the others; kept only if plates drop.
             bool consolidate;
 
+            // Place taller parts toward the centre of the plate (helps print
+            // reliability). Uses centre-seeking, full-scan placement.
+            bool tallCenter;
+
             // Try to reduce the plate count of `solution` in place. Safe: only
             // applied when it strictly reduces the number of plates.
             void consolidateSolution();

@@ -54,6 +54,13 @@ namespace Plater
                         return a->getSurface() < b->getSurface();
                         });
                 break;
+            case PLACER_SORT_HEIGHT_DEC:
+                // Ascending zHeight: the queue pops from the back, so the
+                // tallest parts are placed first (and seek the centre).
+                sort(parts.begin(), parts.end(), [](const PlacedPart *a, const PlacedPart *b) {
+                        return a->getHeight() < b->getHeight();
+                        });
+                break;
             default:
                 unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
                 shuffle(parts.begin(), parts.end(), std::default_random_engine(seed));
@@ -313,11 +320,15 @@ namespace Plater
 
     bool Placer::placePart(Plate *plate, PlacedPart *part)
     {
-        if (request->skyline && plate->mode == PLATE_MODE_RECTANGLE) {
-            return placePartSkyline(plate, part);
-        }
-        if (request->prunedBrute) {
-            return placePartPruned(plate, part);
+        // Centre scoring needs the full scan (its score is not monotonic in x,
+        // so the skyline/pruned shortcuts don't apply).
+        if (scoreMode != PLACER_SCORE_CENTER) {
+            if (request->skyline && plate->mode == PLATE_MODE_RECTANGLE) {
+                return placePartSkyline(plate, part);
+            }
+            if (request->prunedBrute) {
+                return placePartPruned(plate, part);
+            }
         }
 
         std::string cacheName = part->getName();
@@ -336,7 +347,17 @@ namespace Plater
                         for (float y=0; y<plate->height; y+=request->delta) {
                             float gx = part->getGX()+x;
                             float gy = part->getGY()+y;
-                            float score = gy*yCoef+gx*xCoef;
+                            float score;
+                            if (scoreMode == PLACER_SCORE_CENTER) {
+                                // Distance(squared) from the part centre to the
+                                // plate centre; tallest parts (placed first)
+                                // claim the most central spots.
+                                float ddx = gx - plate->width/2;
+                                float ddy = gy - plate->height/2;
+                                score = ddx*ddx + ddy*ddy;
+                            } else {
+                                score = gy*yCoef+gx*xCoef;
+                            }
 
                             if (!found || score < betterScore) {
                                 part->setOffset(x, y);
