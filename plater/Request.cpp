@@ -1102,12 +1102,41 @@ namespace Plater
 
         // Baseline: the full bed gives the fewest plates. We then shrink only as
         // long as the plate count stays at this baseline.
+        //
+        // Single-plate shortcut: a placement search (e.g. -A anneal) only earns
+        // its cost by reducing the plate count, which is impossible once the job
+        // already fits on one plate. So probe the baseline with a fast dense pass
+        // first; if it is a single plate, the only remaining goal is a smaller
+        // bed -- we keep the fast placement and just step the size down, instead
+        // of iterating placements at every size. The search is restored only when
+        // more than one plate is genuinely needed.
+        bool savedAnneal = anneal;
+        anneal = false;                       // fast dense pass for the probe
         int nBase = platesAtSize(maxW, maxH);
         if (nBase < 0) {
             hasError = true;
             error = "Parts don't fit even at the maximum plate size";
             cerr << "! " << error << endl;
+            anneal = savedAnneal;
             return;
+        }
+        if (nBase == 1) {
+            if (savedAnneal) {
+                _log("* Shrink fit: fits on one plate -- minimising size only "
+                        "(fast placement, no iterating)\n");
+            }
+            // anneal stays off: nothing to optimise but the bed size.
+        } else if (savedAnneal) {
+            // More than one plate: the search can still cut the plate count, so
+            // use the requested algorithm for the real baseline and each size.
+            anneal = true;
+            nBase = platesAtSize(maxW, maxH);
+            if (nBase == 1) {
+                // The search itself reached a single plate; switch to size-only.
+                anneal = false;
+                _log("* Shrink fit: search reached one plate -- minimising size "
+                        "only (fast placement)\n");
+            }
         }
         _log("* Shrink fit: %d plate(s) at full bed %g x %g mm\n",
                 nBase, maxW/1000.0, maxH/1000.0);
@@ -1168,5 +1197,7 @@ namespace Plater
             }
             writeFiles(solution);
         }
+
+        anneal = savedAnneal;   // restore the requested algorithm
     }
 }

@@ -212,6 +212,13 @@ larger size.
 * `-z`, enable the shrink fit. Uses `-g` as the step (default `10` mm). Mutually
   exclusive with `-i` (if both are given, `-z` wins).
 
+When the parts already fit on a **single plate** at the full bed, there is no
+plate count left to optimise, so a placement search (`-A anneal`) adds nothing —
+the only goal is a smaller bed. In that case `-z` automatically drops to fast
+placement and just steps the size down, rather than re-running the search at
+every size. When more than one plate is genuinely needed, the requested
+algorithm is used at each size as normal (it can still cut the plate count).
+
 For example, on a 300x300 bed:
 
     plater -b 300 -z -g 20 -A brute project.conf
