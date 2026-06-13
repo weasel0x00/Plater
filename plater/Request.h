@@ -46,6 +46,13 @@ namespace Plater
             // plates. Width and height each start at their own ideal and grow
             // toward their own maximum. Writes the chosen solution's files.
             void processFit(double idealWmm, double idealHmm, double stepMm, int targetPlates);
+            // Shrink fit: start at the full -b bed (which needs the fewest
+            // plates) and step both bed dimensions down by `stepMm`, keeping the
+            // smallest size that still packs into that baseline plate count. Stop
+            // the first time a smaller size would need an extra plate (or no
+            // longer fits a part) and keep the previous, larger size. Unlike
+            // processFit it needs no ideal lower bound -- it descends on its own.
+            void processShrink(double stepMm);
 
             // Plate mode (rectangular or circular)
             int plateMode;

@@ -200,6 +200,27 @@ This tries 250, 255, ... up to 300 on a single plate; if nothing fits on one
 plate it moves to two plates (again preferring the smallest size), and so on.
 The chosen size is what feeds the 3MF plate grid, so combine it freely with `-m`.
 
+## Shrink fit (automatic, no ideal needed)
+
+`-z` is a simpler, automatic variant of the fit search that needs no `-i` ideal.
+It starts at the **full `-b` bed size** — which always needs the fewest plates —
+and steps the bed size **down** by `-g`, keeping the smallest size that still
+packs into that baseline plate count. It **stops the first time a smaller size
+would need an extra plate** (or no longer fits a part) and keeps the previous,
+larger size.
+
+* `-z`, enable the shrink fit. Uses `-g` as the step (default `10` mm). Mutually
+  exclusive with `-i` (if both are given, `-z` wins).
+
+For example, on a 300x300 bed:
+
+    plater -b 300 -z -g 20 -A brute project.conf
+
+might report `1 plate at 300x300`, `still 1 plate at 280x280`, then
+`260x260 would need 2 plates -> stop`, and pick **280x280** — the smallest bed
+that didn't cost an extra plate. As with `-i`, the physical `-b` bed is restored
+for the 3MF plate grid; the shrink only governs how tightly the parts pack.
+
 # The plater.conf file
 
 The configuration file looks like this:

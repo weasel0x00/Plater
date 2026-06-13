@@ -1041,4 +1041,132 @@ namespace Plater
             writeFiles(solution);
         }
     }
+
+    void Request::processShrink(double stepMm)
+    {
+        if (cancel) {
+            return;
+        }
+
+        bool circle = (plateMode == PLATE_MODE_CIRCLE);
+        double maxW = circle ? plateDiameter : plateWidth;
+        double maxH = circle ? plateDiameter : plateHeight;
+        double step = stepMm * 1000.0;
+        if (step <= 0) {
+            step = 10000.0;
+        }
+
+        // Set the plate to (w,h) and cheaply re-filter the loaded parts; returns
+        // false if some part no longer fits at that size.
+        auto applySize = [&](double w, double h) -> bool {
+            if (circle) {
+                plateDiameter = w;
+            } else {
+                plateWidth = w;
+                plateHeight = h;
+            }
+            bool feasible = true;
+            for (auto &kv : parts) {
+                if (kv.second->applyPlateSize(circle ? plateDiameter : plateWidth,
+                                              circle ? plateDiameter : plateHeight) == 0) {
+                    feasible = false;
+                }
+            }
+            return feasible;
+        };
+
+        // Solve at (w,h); returns the plate count, or -1 if a part cannot fit.
+        auto platesAtSize = [&](double w, double h) -> int {
+            if (!applySize(w, h)) {
+                return -1;
+            }
+            solve();
+            return (solution != NULL) ? solution->countPlates() : -1;
+        };
+
+        // Load the parts once at the full bed size (geometry is loaded here;
+        // smaller sizes only re-run the cheap fit filter).
+        if (circle) {
+            plateDiameter = maxW;
+        } else {
+            plateWidth = maxW;
+            plateHeight = maxH;
+        }
+        hasError = false;
+        error = "";
+        readPartsFromString(partsText);
+        if (hasError) {
+            cerr << "! Can't process: " << error << endl;
+            return;
+        }
+
+        // Baseline: the full bed gives the fewest plates. We then shrink only as
+        // long as the plate count stays at this baseline.
+        int nBase = platesAtSize(maxW, maxH);
+        if (nBase < 0) {
+            hasError = true;
+            error = "Parts don't fit even at the maximum plate size";
+            cerr << "! " << error << endl;
+            return;
+        }
+        _log("* Shrink fit: %d plate(s) at full bed %g x %g mm\n",
+                nBase, maxW/1000.0, maxH/1000.0);
+
+        // Step both axes down by `step`, keeping the smallest size that still
+        // packs into nBase plates. Stop at the first size that needs more plates
+        // (or no longer fits a part) and keep the previous, larger size.
+        double bestW = maxW, bestH = maxH;
+        double w = maxW, h = maxH;
+        while (!cancel) {
+            double nw = w - step;
+            double nh = circle ? nw : (h - step);
+            if (nw <= 0 || nh <= 0) {
+                break;   // can't shrink any further
+            }
+            int n = platesAtSize(nw, nh);
+            if (n == nBase) {
+                _log("- %g x %g mm: still %d plate(s) -> shrink further\n",
+                        nw/1000.0, nh/1000.0, n);
+                bestW = nw;
+                bestH = nh;
+                w = nw;
+                h = nh;
+            } else {
+                if (n < 0) {
+                    _log("- %g x %g mm: a part no longer fits -> stop\n",
+                            nw/1000.0, nh/1000.0);
+                } else {
+                    _log("- %g x %g mm: would need %d plate(s) (> %d) -> stop\n",
+                            nw/1000.0, nh/1000.0, n, nBase);
+                }
+                break;
+            }
+        }
+
+        // Re-solve at the chosen (smallest acceptable) size for the final output.
+        platesAtSize(bestW, bestH);
+
+        if (consolidate) {
+            consolidateSolution();
+        }
+
+        if (!cancel && !hasError && solution != NULL) {
+            _log("* Solution\n");
+            _log("- Packed size: %g x %g mm\n",
+                    (circle ? plateDiameter : plateWidth) / 1000.0,
+                    (circle ? plateDiameter : plateHeight) / 1000.0);
+            _log("- Plates: %d\n", solution->countPlates());
+            _log("- Score: %g\n", solution->score());
+
+            // Restore the physical bed so the 3MF plate grid / declared bed match
+            // the real printer; the shrink only governs how tightly parts pack.
+            if (circle) {
+                plateDiameter = maxW;
+            } else {
+                plateWidth = maxW;
+                plateHeight = maxH;
+            }
+            writeFiles(solution);
+        }
+    }
 }

@@ -88,6 +88,10 @@ void help()
     cerr << "            from its own ideal toward -b independently" << endl;
     cerr << "  -g step: growth step in mm while searching (default: 10)" << endl;
     cerr << "  -N plates: number of plates to target first, grows if needed (default: 1)" << endl;
+    cerr << "Shrink fit (automatic; no ideal needed):" << endl;
+    cerr << "  -z: shrink the bed DOWN from -b, keeping the smallest size that still fits in" << endl;
+    cerr << "      the same plate count as the full bed; stops before any size needs an extra" << endl;
+    cerr << "      plate. Uses -g as the step. Mutually exclusive with -i." << endl;
     cerr << "-t threads: sets the number of threads (default 1)" << endl;
     cerr << "-c: enables the output of plates.csv containing plates infos" << endl;
     exit(EXIT_FAILURE);
@@ -99,12 +103,13 @@ int main(int argc, char *argv[])
     Request request;
 
     bool fitMode = false;
+    bool shrinkMode = false;
     double fitIdealW = 0;
     double fitIdealH = 0;
     double fitStep = 10;
     int fitTarget = 1;
 
-    const char *optstring = "hvs:d:r:pmA:CTO:j:d:o:b:R:D:t:Sci:g:N:e:B";
+    const char *optstring = "hvs:d:r:pmA:CTO:j:d:o:b:R:D:t:Sci:g:N:e:Bz";
     permuteArgs(argc, argv, optstring);
 
     while ((index = getopt(argc, argv, optstring)) != -1) {
@@ -220,6 +225,9 @@ int main(int argc, char *argv[])
             case 'B':
                 request.balance = true;
                 break;
+            case 'z':
+                shrinkMode = true;
+                break;
         }
     }
 
@@ -234,7 +242,9 @@ int main(int argc, char *argv[])
         help();
     }
 
-    if (fitMode) {
+    if (shrinkMode) {
+        request.processShrink(fitStep);
+    } else if (fitMode) {
         request.processFit(fitIdealW, fitIdealH, fitStep, fitTarget);
     } else {
         request.process();
