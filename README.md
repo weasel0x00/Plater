@@ -59,6 +59,11 @@ plater [options] plater.conf
 Where `plater.conf` is the name of your configuration file. If `-` is given as a
 file name, the configuration will be read from standard input.
 
+The configuration file (or `-`) is the **only required argument**. Every option
+is optional: value options fall back to the default shown below, and the on/off
+toggles (`-v`, `-p`, `-m`, `-S`, `-c`, `-C`, `-T`, and `-D`) are disabled unless
+given. Options may appear in any order, before or after the config file.
+
 Here are the options:
 
 * `-h`, display the usage/help and exit
