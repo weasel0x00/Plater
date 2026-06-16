@@ -141,15 +141,18 @@ namespace Plater
             // Arrange the parts within `target` plates with the taller parts
             // pulled toward each plate's centre and balanced across plates (the
             // -T layout). Returns the chosen solution, or NULL if no centred
-            // layout fits in `target` plates. Shared by solve() and solveAnneal().
+            // layout fits in `target` plates. Used by the non-anneal -T path.
             Solution *tallCenterWithin(int target);
 
             // Post-pass: try to empty the sparsest plate by re-placing its
             // parts into the gaps of the others; kept only if plates drop.
             bool consolidate;
 
-            // Place taller parts toward the centre of the plate (helps print
-            // reliability). Uses centre-seeking, full-scan placement.
+            // Place taller parts toward the centre of the plate (-T; helps print
+            // reliability). With -A anneal the search itself scores each
+            // placement toward the centre (and composes with -B); otherwise a
+            // post-pass centres the tall parts within the minimum plate count
+            // (see tallCenterWithin).
             bool tallCenter;
 
             // Try to reduce the plate count of `solution` in place. Safe: only

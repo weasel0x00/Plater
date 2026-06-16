@@ -154,30 +154,34 @@ selects an alternative, and `-C` adds a consolidation pass:
   can leave the last plate sparse (e.g. two full plates and a third with only a
   few parts). With `-B`, once the minimum plate count is found — and only if it
   is **more than one plate** — a second annealing phase redistributes the parts
-  so the **total part area is roughly equal across all plates**, *without ever
-  using more plates than the minimum*. Balance is measured as the spread
-  (coefficient of variation) of the summed part surface areas per plate, so it
-  evens out material/part area rather than part counts. Only meaningful with
-  `-A anneal`; it runs a second search of the same `-e` budget. If `-T` is also
-  given, `-T` wins (it re-derives the layout) and the balance pass is skipped.
+  so the **print volume is roughly equal across all plates**, *without ever using
+  more plates than the minimum*. Balance is measured as the spread (coefficient
+  of variation) of the summed part **mesh volume** per plate — volume is a better
+  proxy for print time than 2D footprint, so the plates take a similar time to
+  print. Only meaningful with `-A anneal`; it runs a second search of the same
+  `-e` budget. Composes with `-T`: the search keeps centring while it balances.
 
-  `-A anneal` also honours two existing options: `-t threads` runs that many
-  independent annealing chains in parallel and keeps the best (more chains =
-  more exploration at the *same* wall-clock budget), and `-T` centres the tall
-  parts within the plate count the search found (see `-T` below).
+  `-A anneal` also honours `-t threads`, which runs that many independent
+  annealing chains in parallel and keeps the best (more chains = more
+  exploration at the *same* wall-clock budget).
 * `-C`, consolidation pass. After placing, try to drop a plate by re-packing all
   parts into one fewer plate (exploring several part orderings); the result is
   kept only if it strictly reduces the plate count, so it never makes things
   worse. Useful when a single-sort run leaves a sparse trailing plate; redundant
   with the broader search of `-S`.
 * `-T`, bias taller parts toward the centre of the plate (often more reliable to
-  print — better cooling/adhesion symmetry, less risk from edge drafts). It first
-  finds the minimum number of plates with the normal packing, then, **without
-  exceeding that plate count**, spreads the tall parts evenly across the plates
-  and pulls them toward each plate's centre. When the plates are full there may
-  not be room to centre them — in that case the tall parts are still balanced
-  across the plates (corner-packed). Fewer plates always takes priority over
-  centring.
+  print — better cooling/adhesion symmetry, less risk from edge drafts). How it
+  centres depends on the algorithm:
+  * **With `-A anneal`**: the search itself scores each placement toward the
+    plate centre (seeded tallest-first, largest area breaking height ties), so it
+    optimises a centred layout while still minimising the plate count — and it
+    composes with `-B` (centred *and* volume-balanced).
+  * **Otherwise** (e.g. `-A brute`): it first finds the minimum number of plates
+    with the normal packing, then, **without exceeding that plate count**, spreads
+    the tall parts evenly across the plates and pulls them toward each plate's
+    centre. When the plates are full there may not be room to centre them — the
+    tall parts are then still balanced across the plates (corner-packed). Fewer
+    plates always takes priority over centring.
 
 ## Fit search (ideal plate size)
 

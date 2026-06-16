@@ -25,6 +25,7 @@ namespace Plater
 
             Bitmap *getBmp(int index) const;
             float getSurface() const;
+            float getVolume() const;
             float getDensity(int index) const;
 
             float precision;
@@ -34,6 +35,7 @@ namespace Plater
             float height;
             float zHeight;   // height in Z (print height), in the chosen orientation
             float surface;
+            float volume;    // mesh volume, orientation-independent (print proxy)
 
             int bmps;
             // Per-rotation bitmap "view": points into allBmp for rotations that

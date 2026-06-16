@@ -41,6 +41,9 @@ namespace Plater
         // lives in applyPlateSize so a fit search can re-filter cheaply.
         model = loadModelFromFile(filename.c_str());
         model = model.putFaceOnPlate(orientation);
+        // Mesh volume is orientation-independent; compute it once for plate
+        // balancing (a print-time proxy).
+        volume = model.getVolume();
         allBmp = new Bitmap*[bmps];
         bmp = new Bitmap*[bmps];
         allBmp[0] = model.pixelize(precision, spacing);
@@ -85,6 +88,11 @@ namespace Plater
     float Part::getSurface() const
     {
         return surface;
+    }
+
+    float Part::getVolume() const
+    {
+        return volume;
     }
 
     std::string Part::getFilename()

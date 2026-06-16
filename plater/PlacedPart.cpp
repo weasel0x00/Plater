@@ -38,6 +38,11 @@ namespace Plater
         return part->getSurface();
     }
 
+    float PlacedPart::getVolume() const
+    {
+        return part->getVolume();
+    }
+
     float PlacedPart::getHeight() const
     {
         return part->zHeight;

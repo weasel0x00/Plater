@@ -56,9 +56,14 @@ namespace Plater
                 break;
             case PLACER_SORT_HEIGHT_DEC:
                 // Ascending zHeight: the queue pops from the back, so the
-                // tallest parts are placed first (and seek the centre).
+                // tallest parts are placed first (and seek the centre). Equal
+                // heights break by ascending surface, so among parts of the same
+                // height the largest is placed first (tallest-then-largest).
                 sort(parts.begin(), parts.end(), [](const PlacedPart *a, const PlacedPart *b) {
-                        return a->getHeight() < b->getHeight();
+                        if (a->getHeight() != b->getHeight()) {
+                            return a->getHeight() < b->getHeight();
+                        }
+                        return a->getSurface() < b->getSurface();
                         });
                 break;
             default:

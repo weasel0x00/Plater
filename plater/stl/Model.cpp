@@ -1,7 +1,27 @@
+#include <cmath>
 #include "Model.h"
 
 namespace Plater
 {
+
+    float Model::getVolume()
+    {
+        // Sum the signed volumes of the tetrahedra (origin, v0, v1, v2) over
+        // every triangle; for a closed mesh the magnitude is the enclosed
+        // volume, independent of where the origin sits.
+        double v6 = 0.0;
+        for (auto &volume : volumes) {
+            for (auto &f : volume.faces) {
+                const Point3 &a = f.v[0];
+                const Point3 &b = f.v[1];
+                const Point3 &c = f.v[2];
+                v6 += a.x*(b.y*c.z - b.z*c.y)
+                    - a.y*(b.x*c.z - b.z*c.x)
+                    + a.z*(b.x*c.y - b.y*c.x);
+            }
+        }
+        return (float)(std::fabs(v6) / 6.0);
+    }
 
     Model::Model()
         : tree(NULL)

@@ -19,6 +19,9 @@ namespace Plater
 			virtual ~Model();
 			Point3 min();
 			Point3 max();
+			// Mesh volume (sum of signed tetrahedron volumes over all faces).
+			// Orientation-independent; used to balance plates by print volume.
+			float getVolume();
 			bool contains(float x, float y);
 			Bitmap *pixelize(float precision, float dilatation);
     		Model translate(float X=0, float Y=0, float Z=0);

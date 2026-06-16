@@ -498,6 +498,11 @@ namespace Plater
             p->setGravityMode(c.gravity);
             p->setRotateOffset(c.rotOffset);
             p->setRotateDirection(c.rotDir);
+            if (tallCenter) {
+                // Centre-out placement (-T): pull each part toward the plate
+                // centre instead of a corner. The gravity bias is ignored.
+                p->setScoreMode(PLACER_SCORE_CENTER);
+            }
             if (cap > 0) {
                 p->setMaxPlates(cap);
             }
@@ -506,29 +511,30 @@ namespace Plater
             return s;
         };
 
-        // Per-plate "load" = the sum of its parts' surface areas. The balancing
-        // phase drives these toward equality. Returned as a coefficient of
+        // Per-plate "load" = the sum of its parts' mesh volumes. Volume tracks
+        // print time better than 2D footprint, so the balancing phase evens out
+        // how long each plate takes to print. Returned as a coefficient of
         // variation: 0 == perfectly balanced, scale-free across part sets.
         auto imbalance = [&](Solution *s) -> double {
             int n = s->countPlates();
             if (n < 2) {
                 return 0.0;
             }
-            std::vector<double> area(n, 0.0);
+            std::vector<double> load(n, 0.0);
             double mean = 0;
             for (int i=0; i<n; i++) {
                 for (auto pp : s->getPlate(i)->parts) {
-                    area[i] += pp->getSurface();
+                    load[i] += pp->getVolume();
                 }
-                mean += area[i];
+                mean += load[i];
             }
             mean /= n;
             if (mean <= 0) {
                 return 0.0;
             }
             double var = 0;
-            for (double a : area) {
-                var += (a-mean)*(a-mean);
+            for (double v : load) {
+                var += (v-mean)*(v-mean);
             }
             return sqrt(var/n) / mean;
         };
@@ -584,10 +590,12 @@ namespace Plater
                     Config nbConfig = curConfig;
                     int move = randIdx(4);
                     if (move == 3) {
-                        switch (randIdx(3)) {
-                            case 0: nbConfig.gravity   = randIdx(PLACER_GRAVITY_EQ+1); break;
-                            case 1: nbConfig.rotOffset = randIdx(2); break;
-                            case 2: nbConfig.rotDir    = randIdx(2); break;
+                        // Under centre scoring the gravity bias is ignored, so
+                        // only rotation is worth perturbing.
+                        switch (randIdx(tallCenter ? 2 : 3)) {
+                            case 0: nbConfig.rotOffset = randIdx(2); break;
+                            case 1: nbConfig.rotDir    = randIdx(2); break;
+                            case 2: nbConfig.gravity   = randIdx(PLACER_GRAVITY_EQ+1); break;
                         }
                     } else {
                         int i = randIdx(N), j = randIdx(N);
@@ -694,22 +702,33 @@ namespace Plater
             return results[bestIdx];
         };
 
-        // Seed largest-surface-first (the proven greedy default) so annealing
-        // starts from at-least-brute quality and can only improve on it.
+        // Seed the search from the natural greedy order for the active scoring:
+        // tallest-first (largest surface breaks ties) for centre-out placement,
+        // otherwise largest-surface-first. Either way it starts from at-least the
+        // matching greedy's quality and can only improve on it.
         std::vector<int> seedOrder(N);
         for (int i=0; i<N; i++) {
             seedOrder[i] = i;
         }
-        std::stable_sort(seedOrder.begin(), seedOrder.end(), [&](int a, int b){
-            return insts[a]->getSurface() > insts[b]->getSurface();
-        });
+        if (tallCenter) {
+            std::stable_sort(seedOrder.begin(), seedOrder.end(), [&](int a, int b){
+                if (insts[a]->zHeight != insts[b]->zHeight) {
+                    return insts[a]->zHeight > insts[b]->zHeight;
+                }
+                return insts[a]->getSurface() > insts[b]->getSurface();
+            });
+        } else {
+            std::stable_sort(seedOrder.begin(), seedOrder.end(), [&](int a, int b){
+                return insts[a]->getSurface() > insts[b]->getSurface();
+            });
+        }
         Config seedConfig{PLACER_GRAVITY_YX, 0, 0};
 
         int chains = (nbThreads < 1) ? 1 : (int)nbThreads;
         _log("* Annealing (%d parts, %.0fs budget, %d chain(s)%s%s)\n",
                 N, annealTime, chains,
-                (balance && !tallCenter) ? ", +balance" : "",
-                tallCenter ? ", +tall-centre" : "");
+                tallCenter ? ", centre-out" : "",
+                balance ? ", +balance" : "");
 
         // Phase 1: minimise the plate count. score() also empties the trailing
         // plate, which is what lets a plate be dropped entirely.
@@ -718,12 +737,12 @@ namespace Plater
         Solution *result = r1.sol;
 
         // Phase 2 (optional, -B): with the plate count fixed at the phase-1
-        // minimum, even out the surface area across plates so none is left
-        // sparse. The cap forbids using more plates; a large bonus still rewards
-        // ever using fewer (dropping a plate always beats balancing). Skipped
-        // under -T, which re-derives the whole layout (and already spreads the
-        // tall parts across plates).
-        if (balance && !tallCenter && result != NULL && result->countPlates() > 1) {
+        // minimum, even out the part volume across plates so none is left sparse
+        // and the plates take a similar time to print. The cap forbids using more
+        // plates; a large bonus still rewards ever using fewer (dropping a plate
+        // always beats balancing). Composes with -T: the search keeps centre
+        // scoring while balancing volume.
+        if (balance && result != NULL && result->countPlates() > 1) {
             int P = result->countPlates();
             auto balanceObj = [&,P](Solution *s) -> float {
                 double v = imbalance(s);
@@ -735,27 +754,10 @@ namespace Plater
             ChainResult r2 = runParallel(balanceObj, P, r1.order, r1.config,
                     annealTime, 0.2, 0.002, "balance");
             if (r2.sol != NULL) {
-                _log("- Balanced %d plates: area spread %.1f%% -> %.1f%% (CoV)\n",
+                _log("- Balanced %d plates: volume spread %.1f%% -> %.1f%% (CoV)\n",
                         P, 100.0*imbalance(result), 100.0*imbalance(r2.sol));
                 delete result;
                 result = r2.sol;
-            }
-        } else if (balance && tallCenter) {
-            _log("- Note: -T re-arranges within the minimum plates; -B skipped\n");
-        }
-
-        // Phase T (optional, -T): centre the taller parts within the final plate
-        // count, reusing the same logic as the non-anneal path. Anneal's role
-        // here is to have found the minimum plate count to centre within.
-        if (tallCenter && result != NULL) {
-            int target = result->countPlates();
-            Solution *tc = tallCenterWithin(target);
-            if (tc != NULL) {
-                delete result;
-                result = tc;
-            } else {
-                _log("- Keeping anneal %d-plate packing (no centred layout fit)\n",
-                        target);
             }
         }
 
