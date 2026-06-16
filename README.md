@@ -163,6 +163,12 @@ selects an alternative, and `-C` adds a consolidation pass:
   only if it actually improves the balance and still fits in the minimum plates.
   Only meaningful with `-A anneal`. Composes with `-T` (centred *and* balanced).
 
+  Note when combined with a size search (`-z` / `-i`): a balanced layout needs
+  more room than a dense one (the big parts must be spread out, not crammed), so
+  `-B` holds the bed at the smallest size where the *balanced* packing still fits
+  the minimum plates, rather than shrinking down to where only a dense (lopsided)
+  packing fits. In other words, `-B` trades a little bed size for an even split.
+
   `-A anneal` also honours `-t threads`, which runs that many independent
   annealing chains in parallel and keeps the best (more chains = more
   exploration at the *same* wall-clock budget).

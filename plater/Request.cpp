@@ -51,7 +51,8 @@ namespace Plater
         tallCenter(false),
         anneal(false),
         annealTime(30.0),
-        balance(false)
+        balance(false),
+        balanceFit(true)
     {
     }
 
@@ -742,16 +743,24 @@ namespace Plater
         // instead reassign the parts largest-volume-first onto the least-loaded
         // plate that fits them (LPT). Keep it only if it both fits in P plates
         // and actually improves the balance. Composes with -T (centre scoring).
+        balanceFit = true;   // until proven otherwise (no balance, or it fits)
         if (balance && result != NULL && result->countPlates() > 1) {
             int P = result->countPlates();
             Placer vb(this);
             Solution *vbSol = vb.placeVolumeBalanced(P, tallCenter);
-            if (vbSol != NULL && imbalance(vbSol) < imbalance(result)) {
+            if (vbSol == NULL) {
+                balanceFit = false;
+                _log("- Balance: volume-balanced packing did not fit in %d plates "
+                        "-- keeping dense layout (%.1f%% CoV)\n",
+                        P, 100.0*imbalance(result));
+            } else if (imbalance(vbSol) < imbalance(result)) {
                 _log("- Balanced %d plates: volume spread %.1f%% -> %.1f%% (CoV)\n",
                         P, 100.0*imbalance(result), 100.0*imbalance(vbSol));
                 delete result;
                 result = vbSol;
-            } else if (vbSol != NULL) {
+            } else {
+                _log("- Balance: dense layout already as even (%.1f%% vs %.1f%% CoV) "
+                        "-- kept\n", 100.0*imbalance(result), 100.0*imbalance(vbSol));
                 delete vbSol;
             }
         }
@@ -1011,7 +1020,9 @@ namespace Plater
             chosen = -1;
             for (int t = 0; t < steps; t++) {
                 int n = platesAt(t);
-                if (n > 0 && n <= acceptable) {
+                // With -B, also require the balanced packing to fit (a too-tight
+                // bed can hold the parts but not a balanced layout).
+                if (n > 0 && n <= acceptable && balanceFit) {
                     chosen = t;
                     break;
                 }
@@ -1167,7 +1178,11 @@ namespace Plater
         // Step both axes down by `step` from the full bed, keeping the smallest
         // size that still packs into nBase plates. Stop at the first size that
         // needs more plates (or no longer fits a part) and keep the previous,
-        // larger size.
+        // larger size. With -B we additionally require that the *balanced*
+        // packing still fits in nBase plates: a tighter bed leaves no room to
+        // spread the big parts, so shrinking past that point would silently give
+        // up balance. So stop once balance no longer fits, even if a dense pack
+        // still would.
         double bestW = maxW, bestH = maxH;
         double w = maxW, h = maxH;
         while (!cancel) {
@@ -1177,9 +1192,9 @@ namespace Plater
                 break;   // can't shrink any further
             }
             int n = platesAtSize(nw, nh);
-            if (n == nBase) {
-                _log("- %g x %g mm: still %d plate(s) -> shrink further\n",
-                        nw/1000.0, nh/1000.0, n);
+            if (n == nBase && balanceFit) {
+                _log("- %g x %g mm: still %d plate(s)%s -> shrink further\n",
+                        nw/1000.0, nh/1000.0, n, balance ? " (balanced)" : "");
                 bestW = nw;
                 bestH = nh;
                 w = nw;
@@ -1188,6 +1203,9 @@ namespace Plater
                 if (n < 0) {
                     _log("- %g x %g mm: a part no longer fits -> stop\n",
                             nw/1000.0, nh/1000.0);
+                } else if (n == nBase && !balanceFit) {
+                    _log("- %g x %g mm: %d plate(s) but can't balance -> stop\n",
+                            nw/1000.0, nh/1000.0, n);
                 } else {
                     _log("- %g x %g mm: would need %d plate(s) (> %d) -> stop\n",
                             nw/1000.0, nh/1000.0, n, nBase);

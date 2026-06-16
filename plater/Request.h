@@ -133,6 +133,13 @@ namespace Plater
             // none is left sparse. Off by default (dense packing).
             bool balance;
 
+            // Set by solveAnneal: whether the volume-balanced packing actually
+            // fit in the minimum plate count at the last solved size. The shrink
+            // search reads this so that, with -B, it only shrinks while the
+            // plates can still be balanced (a tighter bed has no room to spread
+            // the big parts). True when not balancing or balance isn't needed.
+            bool balanceFit;
+
             // Search part orderings with simulated annealing and store the best
             // packing in `solution`. Seeded from the largest-first greedy result
             // so it never does worse than the brute-force algorithm.
