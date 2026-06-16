@@ -80,11 +80,14 @@ Here are the options:
 * `-b size`, the size of the bedplate (in 2D, top view), in mm (default `150`). A
   single value (e.g. `-b 300`) is a square bed; use `AxB` (e.g. `-b 300x200`) for
   a rectangular bed.
+* `-W width` / `-H height`, the bed width and height in mm, set independently.
+  This is the older form of `-b` (`-W 300 -H 200` is the same as `-b 300x200`),
+  kept for backward compatibility with existing scripts.
 * `-D diameter`, set a circular bed of the given diameter, in mm (instead of the
   rectangular `-b`).
 * `-j precision`, precision, in mm (default `0.5`)
-* `-s spacing`, parts spacing, in mm (default `1.5`)
-* `-d delta`, sets the spacing of the brute forcing (see below), default `1`mm
+* `-s spacing`, parts spacing, in mm (default `2`)
+* `-d delta`, sets the spacing of the brute forcing (see below), default `2`mm
 * `-r rotation`, sets the angle of the brute forcing, default `90`°
 * `-S`, try multiple sort possibilities. Instead of placing once with a single
   ordering (largest-area first), the placer runs over many part orderings —

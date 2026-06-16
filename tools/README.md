@@ -85,5 +85,5 @@ and `TridentR2/accent_parts.conf`:
 You can then plate them, e.g.:
 
 ```
-plater -W 300 -H 300 -A pruned -m -O TridentR2 TridentR2/plater.conf
+plater -b 300 -A pruned -m -O TridentR2 TridentR2/plater.conf
 ```

@@ -212,7 +212,7 @@
           <item>
            <widget class="QLineEdit" name="spacing">
             <property name="text">
-             <string>1.5</string>
+             <string>2</string>
             </property>
            </widget>
           </item>
@@ -251,7 +251,7 @@
           <item>
            <widget class="QLineEdit" name="bruteForceSpacing">
             <property name="text">
-             <string>1</string>
+             <string>2</string>
             </property>
            </widget>
           </item>

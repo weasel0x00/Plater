@@ -57,10 +57,12 @@ void help()
     cerr << "-v: Verbose mode" << endl;
     cerr << "-b size: bed plate size in mm (topview, 2D); default 150. A single value" << endl;
     cerr << "         is square; use AxB (e.g. 300x200) for a rectangular bed" << endl;
+    cerr << "-W width: bed width in mm; -H height: bed height in mm. Older form of -b" << endl;
+    cerr << "         (e.g. -W 300 -H 200 == -b 300x200); kept for backward compatibility" << endl;
     cerr << "-D diameter: Set the plate diameter, in mm. If set, this will put the plate in circular mode" << endl;
     cerr << "-j precision: Sets the precision (in mm, default: 0.5)" << endl;
-    cerr << "-s spacing: Change the spacing between parts (in mm, default: 1.5)" << endl;
-    cerr << "-d delta: Sets the interval of place grid (in mm, default: 1)" << endl;
+    cerr << "-s spacing: Change the spacing between parts (in mm, default: 2)" << endl;
+    cerr << "-d delta: Sets the interval of place grid (in mm, default: 2)" << endl;
     cerr << "-r rotation: Sets the interval of rotation (in °, default: 90)" << endl;
     cerr << "-S: Trying multiple sort possibilities" << endl;
     cerr << "-R random: Sets the number of random (shuffled parts) iterations (only with -S)" << endl;
@@ -112,7 +114,7 @@ int main(int argc, char *argv[])
     double fitStep = 10;
     int fitTarget = 1;
 
-    const char *optstring = "hvs:d:r:pmA:CTO:j:d:o:b:R:D:t:Sci:g:N:e:Bz";
+    const char *optstring = "hvs:d:r:pmA:CTO:j:d:o:b:W:H:R:D:t:Sci:g:N:e:Bz";
     permuteArgs(argc, argv, optstring);
 
     while ((index = getopt(argc, argv, optstring)) != -1) {
@@ -186,6 +188,14 @@ int main(int argc, char *argv[])
                 }
                 break;
             }
+            case 'W':
+                // Backward-compatible width setter (older -W/-H form of -b).
+                request.plateWidth = atof(optarg)*1000;
+                break;
+            case 'H':
+                // Backward-compatible height setter (older -W/-H form of -b).
+                request.plateHeight = atof(optarg)*1000;
+                break;
             case 'S':
                 request.sortMode = REQUEST_MULTIPLE_SORTS;
                 break;
