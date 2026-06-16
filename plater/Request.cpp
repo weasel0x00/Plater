@@ -1002,22 +1002,48 @@ namespace Plater
         }
         int acceptable = targetPlates > nMax ? targetPlates : nMax;
 
-        // Binary-search the smallest step whose plate count is within the
-        // acceptable bound (plate count is monotonic non-increasing in size).
-        int lo = 0, hi = steps, chosen = steps;
-        while (lo <= hi) {
-            int mid = (lo + hi) / 2;
-            int n = platesAt(mid);
-            if (n > 0 && n <= acceptable) {
-                chosen = mid;
-                hi = mid - 1;
-            } else {
-                lo = mid + 1;
+        int chosen;
+        if (anneal) {
+            // The annealing search is not perfectly monotonic in plate size: a
+            // feasible small plate can momentarily report more plates than a
+            // luckier run would, so a binary search reacts by skipping ahead to
+            // ever-larger plates. Instead, grow from the smallest size and stop
+            // at the FIRST size that reaches the acceptable plate count -- what
+            // anneal reports there is a real packing, so that is the smallest
+            // plate achieving it, and there is no reason to try larger ones. The
+            // solution from that step is kept as-is (re-solving would re-randomise
+            // it into a possibly different result).
+            chosen = -1;
+            for (int t = 0; t < steps; t++) {
+                int n = platesAt(t);
+                if (n > 0 && n <= acceptable) {
+                    chosen = t;
+                    break;
+                }
             }
+            if (chosen < 0) {
+                // Nothing smaller reached it; keep the largest (full bed) size.
+                chosen = steps;
+                platesAt(steps);
+            }
+        } else {
+            // Deterministic placement is monotonic in size: binary-search the
+            // smallest step whose plate count is within the acceptable bound.
+            int lo = 0, hi = steps;
+            chosen = steps;
+            while (lo <= hi) {
+                int mid = (lo + hi) / 2;
+                int n = platesAt(mid);
+                if (n > 0 && n <= acceptable) {
+                    chosen = mid;
+                    hi = mid - 1;
+                } else {
+                    lo = mid + 1;
+                }
+            }
+            // Ensure the final solution corresponds to the chosen step.
+            platesAt(chosen);
         }
-
-        // Ensure the final solution corresponds to the chosen step.
-        platesAt(chosen);
 
         if (consolidate) {
             consolidateSolution();
@@ -1143,39 +1169,77 @@ namespace Plater
         _log("* Shrink fit: %d plate(s) at full bed %g x %g mm\n",
                 nBase, maxW/1000.0, maxH/1000.0);
 
-        // Step both axes down by `step`, keeping the smallest size that still
-        // packs into nBase plates. Stop at the first size that needs more plates
-        // (or no longer fits a part) and keep the previous, larger size.
         double bestW = maxW, bestH = maxH;
-        double w = maxW, h = maxH;
-        while (!cancel) {
-            double nw = w - step;
-            double nh = circle ? nw : (h - step);
-            if (nw <= 0 || nh <= 0) {
-                break;   // can't shrink any further
+        if (anneal) {
+            // Robust ascending scan (same reasoning as the -i fit search): the
+            // random anneal isn't monotonic in plate size, so a descending "stop
+            // when plates increase" scan can stop on one unlucky run and keep a
+            // larger plate than necessary. Instead grow from the smallest
+            // feasible size and stop at the FIRST size that reaches nBase -- what
+            // anneal reports there is a real packing, so that is the smallest
+            // plate achieving it. Keep that step's solution as-is.
+            int kMax = 1;
+            while ((maxW - (kMax+1)*step) > 0 && (circle || (maxH - (kMax+1)*step) > 0)) {
+                kMax++;
             }
-            int n = platesAtSize(nw, nh);
-            if (n == nBase) {
-                _log("- %g x %g mm: still %d plate(s) -> shrink further\n",
-                        nw/1000.0, nh/1000.0, n);
-                bestW = nw;
-                bestH = nh;
-                w = nw;
-                h = nh;
-            } else {
+            bool found = false;
+            for (int k = kMax; k >= 1 && !cancel; k--) {
+                double nw = maxW - k*step;
+                double nh = circle ? nw : (maxH - k*step);
+                int n = platesAtSize(nw, nh);
                 if (n < 0) {
-                    _log("- %g x %g mm: a part no longer fits -> stop\n",
-                            nw/1000.0, nh/1000.0);
-                } else {
-                    _log("- %g x %g mm: would need %d plate(s) (> %d) -> stop\n",
-                            nw/1000.0, nh/1000.0, n, nBase);
+                    continue;   // too small for some part; grow
                 }
-                break;
+                if (n <= nBase) {
+                    _log("- %g x %g mm: %d plate(s) -> smallest at baseline\n",
+                            nw/1000.0, nh/1000.0, n);
+                    bestW = nw;
+                    bestH = nh;
+                    found = true;
+                    break;
+                }
+                _log("- %g x %g mm: needs %d plate(s) (> %d) -> grow\n",
+                        nw/1000.0, nh/1000.0, n, nBase);
             }
+            if (!found) {
+                // Nothing smaller reached nBase; keep the full bed.
+                platesAtSize(maxW, maxH);
+            }
+        } else {
+            // Deterministic placement is monotonic in size: step both axes down
+            // by `step`, keeping the smallest size that still packs into nBase
+            // plates. Stop at the first size that needs more plates (or no longer
+            // fits a part) and keep the previous, larger size.
+            double w = maxW, h = maxH;
+            while (!cancel) {
+                double nw = w - step;
+                double nh = circle ? nw : (h - step);
+                if (nw <= 0 || nh <= 0) {
+                    break;   // can't shrink any further
+                }
+                int n = platesAtSize(nw, nh);
+                if (n == nBase) {
+                    _log("- %g x %g mm: still %d plate(s) -> shrink further\n",
+                            nw/1000.0, nh/1000.0, n);
+                    bestW = nw;
+                    bestH = nh;
+                    w = nw;
+                    h = nh;
+                } else {
+                    if (n < 0) {
+                        _log("- %g x %g mm: a part no longer fits -> stop\n",
+                                nw/1000.0, nh/1000.0);
+                    } else {
+                        _log("- %g x %g mm: would need %d plate(s) (> %d) -> stop\n",
+                                nw/1000.0, nh/1000.0, n, nBase);
+                    }
+                    break;
+                }
+            }
+            // Re-solve at the chosen size for the final output (deterministic, so
+            // this reproduces the same packing).
+            platesAtSize(bestW, bestH);
         }
-
-        // Re-solve at the chosen (smallest acceptable) size for the final output.
-        platesAtSize(bestW, bestH);
 
         if (consolidate) {
             consolidateSolution();

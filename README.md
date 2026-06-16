@@ -197,11 +197,17 @@ mode `-b` are the *physical maximum* plate size (your bed), and you give an
 * `-g step`, the growth increment, in mm (default `10`).
 * `-N plates`, the number of plates to target first (default `1`).
 
-The search grows the plate size from the ideal up to the bed size in `-g` steps
-(each axis toward its own `-b`, never exceeding it), and stops at the
-smallest size that fits the parts in `-N` plates (or fewer). If even the full bed
-size cannot fit them in `-N` plates, it uses one more plate and keeps the
-smallest size that achieves that fewest-plates result.
+The search first checks the **full bed size** (which always yields the fewest
+plates) to establish the target plate count, then grows the plate size from the
+ideal up to the bed (each axis toward its own `-b`, never exceeding it) and stops
+at the **smallest size that reaches that target** (`-N` plates, or the fewest
+reachable if `-N` can't be met). It does not keep trying larger sizes once the
+target is reached.
+
+With `-A anneal` the size scan is deliberately linear (smallest upward, stopping
+at the first size that reaches the target) rather than a binary search: the
+annealing result isn't perfectly repeatable, so a binary search could mistake a
+feasible small plate for needing more plates and skip to needlessly larger ones.
 
 For example, with a 300x300 bed but a preferred 250x250 area, packing holed
 parts (hole-aware, faster) into a named 3MF:
