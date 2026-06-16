@@ -150,16 +150,18 @@ selects an alternative, and `-C` adds a consolidation pass:
   Larger budgets explore more orderings and pack tighter; it stops at the budget
   and keeps the best packing seen so far, so you can stop it any time. No effect
   unless `-A anneal` is selected.
-* `-B`, balance pass for `-A anneal`. By default `anneal` packs densely, which
-  can leave the last plate sparse (e.g. two full plates and a third with only a
-  few parts). With `-B`, once the minimum plate count is found — and only if it
-  is **more than one plate** — a second annealing phase redistributes the parts
-  so the **print volume is roughly equal across all plates**, *without ever using
-  more plates than the minimum*. Balance is measured as the spread (coefficient
-  of variation) of the summed part **mesh volume** per plate — volume is a better
-  proxy for print time than 2D footprint, so the plates take a similar time to
-  print. Only meaningful with `-A anneal`; it runs a second search of the same
-  `-e` budget. Composes with `-T`: the search keeps centring while it balances.
+* `-B`, balance pass for `-A anneal`. The dense first-fit packing fills the first
+  plate preferentially, so the last plate can end up much lighter (e.g. two full
+  plates and a third with only a few parts). With `-B`, once the minimum plate
+  count is found — and only if it is **more than one plate** — the parts are
+  **reassigned largest-volume-first onto the least-loaded plate that fits them**
+  (an LPT pass), spreading the big parts across the plates so the **print volume
+  comes out roughly equal**, *without ever using more plates than the minimum*.
+  Balance is measured as the spread (coefficient of variation) of the summed part
+  **mesh volume** per plate — volume is a better proxy for print time than 2D
+  footprint, so the plates take a similar time to print. The reassignment is kept
+  only if it actually improves the balance and still fits in the minimum plates.
+  Only meaningful with `-A anneal`. Composes with `-T` (centred *and* balanced).
 
   `-A anneal` also honours `-t threads`, which runs that many independent
   annealing chains in parallel and keeps the best (more chains = more

@@ -541,6 +541,81 @@ namespace Plater
         return sol;
     }
 
+    Solution *Placer::placeVolumeBalanced(int nPlates, bool useCenter)
+    {
+        Solution *sol = new Solution(request->plateWidth, request->plateHeight,
+                request->plateDiameter, request->plateMode, request->precision);
+        for (int i=0; i<nPlates; i++) {
+            sol->addPlate();
+        }
+
+        // Greedy LPT balancing: place the largest-volume parts first, each onto
+        // the currently least-loaded plate it fits on. Plain first-fit fills the
+        // first plate preferentially; this instead spreads the big parts across
+        // the plates so their total print volume comes out even.
+        std::sort(parts.begin(), parts.end(), [](const PlacedPart *a, const PlacedPart *b) {
+                return a->getVolume() < b->getVolume();   // back() = largest, popped first
+                });
+
+        std::vector<double> plateVolume(nPlates, 0.0);
+        bool failed = false;
+
+        while (parts.size() && !failed) {
+            PlacedPart *part = getNextPart();   // largest remaining volume
+            // Visit plates from least to most loaded so big parts spread out.
+            std::vector<int> order(nPlates);
+            for (int i=0; i<nPlates; i++) {
+                order[i] = i;
+            }
+            std::sort(order.begin(), order.end(),
+                    [&](int a, int b){ return plateVolume[a] < plateVolume[b]; });
+
+            bool placed = false;
+            scoreMode = useCenter ? PLACER_SCORE_CENTER : PLACER_SCORE_GRAVITY;
+            for (int p : order) {
+                if (placePart(sol->getPlate(p), part)) {
+                    plateVolume[p] += part->getVolume();
+                    placed = true;
+                    break;
+                }
+            }
+
+            if (!placed && useCenter) {
+                // Centred placement didn't fit anywhere; retry corner-packed so
+                // the part still lands on the least-loaded plate that holds it.
+                for (int p=0; p<nPlates; p++) {
+                    cache[sol->getPlate(p)].erase(part->getName());
+                }
+                scoreMode = PLACER_SCORE_GRAVITY;
+                for (int p : order) {
+                    if (placePart(sol->getPlate(p), part)) {
+                        plateVolume[p] += part->getVolume();
+                        placed = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!placed) {
+                delete part;
+                failed = true;   // doesn't fit within nPlates at all
+            }
+        }
+
+        if (failed) {
+            for (auto p : parts) {
+                delete p;
+            }
+            parts.clear();
+            delete sol;
+            this->solution = NULL;
+            return NULL;
+        }
+
+        this->solution = sol;
+        return sol;
+    }
+
     void Placer::placeThreaded()
     {
         myThread = new std::thread([this](){

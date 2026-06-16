@@ -736,28 +736,23 @@ namespace Plater
                 seedOrder, seedConfig, annealTime, 1.0, 0.01, "min-plates");
         Solution *result = r1.sol;
 
-        // Phase 2 (optional, -B): with the plate count fixed at the phase-1
-        // minimum, even out the part volume across plates so none is left sparse
-        // and the plates take a similar time to print. The cap forbids using more
-        // plates; a large bonus still rewards ever using fewer (dropping a plate
-        // always beats balancing). Composes with -T: the search keeps centre
-        // scoring while balancing volume.
+        // Phase 2 (optional, -B): even out the part volume across plates so they
+        // take a similar time to print. The greedy first-fit above fills the
+        // first plate preferentially, so reordering alone can't balance well;
+        // instead reassign the parts largest-volume-first onto the least-loaded
+        // plate that fits them (LPT). Keep it only if it both fits in P plates
+        // and actually improves the balance. Composes with -T (centre scoring).
         if (balance && result != NULL && result->countPlates() > 1) {
             int P = result->countPlates();
-            auto balanceObj = [&,P](Solution *s) -> float {
-                double v = imbalance(s);
-                if (s->countPlates() < P) {
-                    v -= 1000.0;
-                }
-                return (float)v;
-            };
-            ChainResult r2 = runParallel(balanceObj, P, r1.order, r1.config,
-                    annealTime, 0.2, 0.002, "balance");
-            if (r2.sol != NULL) {
+            Placer vb(this);
+            Solution *vbSol = vb.placeVolumeBalanced(P, tallCenter);
+            if (vbSol != NULL && imbalance(vbSol) < imbalance(result)) {
                 _log("- Balanced %d plates: volume spread %.1f%% -> %.1f%% (CoV)\n",
-                        P, 100.0*imbalance(result), 100.0*imbalance(r2.sol));
+                        P, 100.0*imbalance(result), 100.0*imbalance(vbSol));
                 delete result;
-                result = r2.sol;
+                result = vbSol;
+            } else if (vbSol != NULL) {
+                delete vbSol;
             }
         }
 
@@ -1169,77 +1164,40 @@ namespace Plater
         _log("* Shrink fit: %d plate(s) at full bed %g x %g mm\n",
                 nBase, maxW/1000.0, maxH/1000.0);
 
+        // Step both axes down by `step` from the full bed, keeping the smallest
+        // size that still packs into nBase plates. Stop at the first size that
+        // needs more plates (or no longer fits a part) and keep the previous,
+        // larger size.
         double bestW = maxW, bestH = maxH;
-        if (anneal) {
-            // Robust ascending scan (same reasoning as the -i fit search): the
-            // random anneal isn't monotonic in plate size, so a descending "stop
-            // when plates increase" scan can stop on one unlucky run and keep a
-            // larger plate than necessary. Instead grow from the smallest
-            // feasible size and stop at the FIRST size that reaches nBase -- what
-            // anneal reports there is a real packing, so that is the smallest
-            // plate achieving it. Keep that step's solution as-is.
-            int kMax = 1;
-            while ((maxW - (kMax+1)*step) > 0 && (circle || (maxH - (kMax+1)*step) > 0)) {
-                kMax++;
+        double w = maxW, h = maxH;
+        while (!cancel) {
+            double nw = w - step;
+            double nh = circle ? nw : (h - step);
+            if (nw <= 0 || nh <= 0) {
+                break;   // can't shrink any further
             }
-            bool found = false;
-            for (int k = kMax; k >= 1 && !cancel; k--) {
-                double nw = maxW - k*step;
-                double nh = circle ? nw : (maxH - k*step);
-                int n = platesAtSize(nw, nh);
+            int n = platesAtSize(nw, nh);
+            if (n == nBase) {
+                _log("- %g x %g mm: still %d plate(s) -> shrink further\n",
+                        nw/1000.0, nh/1000.0, n);
+                bestW = nw;
+                bestH = nh;
+                w = nw;
+                h = nh;
+            } else {
                 if (n < 0) {
-                    continue;   // too small for some part; grow
-                }
-                if (n <= nBase) {
-                    _log("- %g x %g mm: %d plate(s) -> smallest at baseline\n",
-                            nw/1000.0, nh/1000.0, n);
-                    bestW = nw;
-                    bestH = nh;
-                    found = true;
-                    break;
-                }
-                _log("- %g x %g mm: needs %d plate(s) (> %d) -> grow\n",
-                        nw/1000.0, nh/1000.0, n, nBase);
-            }
-            if (!found) {
-                // Nothing smaller reached nBase; keep the full bed.
-                platesAtSize(maxW, maxH);
-            }
-        } else {
-            // Deterministic placement is monotonic in size: step both axes down
-            // by `step`, keeping the smallest size that still packs into nBase
-            // plates. Stop at the first size that needs more plates (or no longer
-            // fits a part) and keep the previous, larger size.
-            double w = maxW, h = maxH;
-            while (!cancel) {
-                double nw = w - step;
-                double nh = circle ? nw : (h - step);
-                if (nw <= 0 || nh <= 0) {
-                    break;   // can't shrink any further
-                }
-                int n = platesAtSize(nw, nh);
-                if (n == nBase) {
-                    _log("- %g x %g mm: still %d plate(s) -> shrink further\n",
-                            nw/1000.0, nh/1000.0, n);
-                    bestW = nw;
-                    bestH = nh;
-                    w = nw;
-                    h = nh;
+                    _log("- %g x %g mm: a part no longer fits -> stop\n",
+                            nw/1000.0, nh/1000.0);
                 } else {
-                    if (n < 0) {
-                        _log("- %g x %g mm: a part no longer fits -> stop\n",
-                                nw/1000.0, nh/1000.0);
-                    } else {
-                        _log("- %g x %g mm: would need %d plate(s) (> %d) -> stop\n",
-                                nw/1000.0, nh/1000.0, n, nBase);
-                    }
-                    break;
+                    _log("- %g x %g mm: would need %d plate(s) (> %d) -> stop\n",
+                            nw/1000.0, nh/1000.0, n, nBase);
                 }
+                break;
             }
-            // Re-solve at the chosen size for the final output (deterministic, so
-            // this reproduces the same packing).
-            platesAtSize(bestW, bestH);
         }
+
+        // Re-solve at the chosen (smallest acceptable) size for the final output.
+        platesAtSize(bestW, bestH);
 
         if (consolidate) {
             consolidateSolution();

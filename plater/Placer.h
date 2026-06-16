@@ -52,6 +52,11 @@ namespace Plater
             // the rest (denser). Returns NULL if the parts don't fit in
             // nPlates. Used for -T.
             Solution *placeCenterBalanced(int nPlates, bool useCenter);
+            // Place into exactly nPlates, assigning each part largest-volume-first
+            // to the least-loaded plate it fits on (LPT), so the total part volume
+            // is balanced across plates. Returns NULL if the parts don't fit in
+            // nPlates. Used by the -B balance pass.
+            Solution *placeVolumeBalanced(int nPlates, bool useCenter);
             void placeThreaded();
             Solution *solution;
 
