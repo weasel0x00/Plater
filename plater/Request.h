@@ -140,6 +140,13 @@ namespace Plater
             // the big parts). True when not balancing or balance isn't needed.
             bool balanceFit;
 
+            // Set by tallCenterWithin: whether the tall parts were actually
+            // centred at the last solved size (vs. corner-packed because there
+            // was no room). With -T the shrink reads this so it only shrinks while
+            // the tall part can still be centred -- the tightest *centred* bed,
+            // not the tightest dense one. True when not centring.
+            bool centerFit;
+
             // Search part orderings with simulated annealing and store the best
             // packing in `solution`. Seeded from the largest-first greedy result
             // so it never does worse than the brute-force algorithm.

@@ -245,6 +245,12 @@ placement and just steps the size down, rather than re-running the search at
 every size. When more than one plate is genuinely needed, the requested
 algorithm is used at each size as normal (it can still cut the plate count).
 
+`-T` interacts with the shrink the same way `-B` does: centring the tall part
+needs a little room, so the very tightest bed would pack everything into a corner
+with the tall part off to one side. With `-T`, `-z` therefore stops at the
+**smallest bed where the tall part can still be centred**, rather than shrinking
+all the way down to the densest corner-pack — the tightest *centred* layout.
+
 For example, on a 300x300 bed:
 
     plater -b 300 -z -g 20 -A brute project.conf

@@ -52,7 +52,8 @@ namespace Plater
         anneal(false),
         annealTime(30.0),
         balance(false),
-        balanceFit(true)
+        balanceFit(true),
+        centerFit(true)
     {
     }
 
@@ -458,6 +459,9 @@ namespace Plater
                     if (c != NULL && c->countPlates() <= target) {
                         _log("- Tall parts %s within %d plate(s)\n",
                                 tryCenter[t] ? "centred & balanced" : "balanced", target);
+                        // tryCenter[0] is the centred layout; tryCenter[1] is the
+                        // corner-packed fallback (no room to centre).
+                        centerFit = tryCenter[t];
                         return c;
                     } else if (c != NULL) {
                         delete c;
@@ -465,11 +469,17 @@ namespace Plater
                 }
             }
         }
+        centerFit = false;   // nothing fit at all
         return NULL;
     }
 
     void Request::solveAnneal()
     {
+        // The anneal centres via its placement score (a soft bias), not the
+        // binary centred/corner fallback that tallCenterWithin uses, so it never
+        // reports a centring "miss".
+        centerFit = true;
+
         // Canonical instance list, expanded in the SAME order Placer's
         // constructor walks request->quantities. A permutation of [0,N) then
         // maps 1:1 onto a placer's part queue via Placer::setOrder().
@@ -1179,10 +1189,11 @@ namespace Plater
         // size that still packs into nBase plates. Stop at the first size that
         // needs more plates (or no longer fits a part) and keep the previous,
         // larger size. With -B we additionally require that the *balanced*
-        // packing still fits in nBase plates: a tighter bed leaves no room to
-        // spread the big parts, so shrinking past that point would silently give
-        // up balance. So stop once balance no longer fits, even if a dense pack
-        // still would.
+        // packing still fits in nBase plates, and with -T that the tall part can
+        // still be *centred*: a tighter bed leaves no room to spread the big
+        // parts or to centre the tall one, so shrinking past that point would
+        // silently give those up. So stop once balance/centring no longer fits,
+        // even if a dense pack still would -- the tightest bed that keeps them.
         double bestW = maxW, bestH = maxH;
         double w = maxW, h = maxH;
         while (!cancel) {
@@ -1192,9 +1203,10 @@ namespace Plater
                 break;   // can't shrink any further
             }
             int n = platesAtSize(nw, nh);
-            if (n == nBase && balanceFit) {
-                _log("- %g x %g mm: still %d plate(s)%s -> shrink further\n",
-                        nw/1000.0, nh/1000.0, n, balance ? " (balanced)" : "");
+            if (n == nBase && balanceFit && (!tallCenter || centerFit)) {
+                _log("- %g x %g mm: still %d plate(s)%s%s -> shrink further\n",
+                        nw/1000.0, nh/1000.0, n, balance ? " (balanced)" : "",
+                        tallCenter ? " (centred)" : "");
                 bestW = nw;
                 bestH = nh;
                 w = nw;
@@ -1206,6 +1218,9 @@ namespace Plater
                 } else if (n == nBase && !balanceFit) {
                     _log("- %g x %g mm: %d plate(s) but can't balance -> stop\n",
                             nw/1000.0, nh/1000.0, n);
+                } else if (n == nBase && tallCenter && !centerFit) {
+                    _log("- %g x %g mm: %d plate(s) but can't centre the tall part "
+                            "-> stop\n", nw/1000.0, nh/1000.0, n);
                 } else {
                     _log("- %g x %g mm: would need %d plate(s) (> %d) -> stop\n",
                             nw/1000.0, nh/1000.0, n, nBase);
