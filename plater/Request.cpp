@@ -1229,7 +1229,12 @@ namespace Plater
             }
         }
 
-        // Re-solve at the chosen (smallest acceptable) size for the final output.
+        // Final placement at the chosen size. The single-plate path runs a fast
+        // placer during the size search, but for the final layout we restore the
+        // requested algorithm: with -A anneal that gives the dense centre-all
+        // packing, which fills the gaps the basic centred greedy leaves. (Multi-
+        // plate already runs the anneal throughout.)
+        anneal = savedAnneal;
         platesAtSize(bestW, bestH);
 
         if (consolidate) {

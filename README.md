@@ -239,11 +239,14 @@ larger size.
   exclusive with `-i` (if both are given, `-z` wins).
 
 When the parts already fit on a **single plate** at the full bed, there is no
-plate count left to optimise, so a placement search (`-A anneal`) adds nothing —
-the only goal is a smaller bed. In that case `-z` automatically drops to fast
-placement and just steps the size down, rather than re-running the search at
-every size. When more than one plate is genuinely needed, the requested
-algorithm is used at each size as normal (it can still cut the plate count).
+plate count left to optimise, so a placement *search* (`-A anneal`) adds nothing
+to the size hunt — the only goal is a smaller bed. In that case `-z` uses fast
+placement to step the size down, rather than re-running the search at every size.
+The **final layout at the chosen size still uses the requested algorithm**,
+though, so `-A anneal` gives its dense centre-out packing (which fills the gaps
+that the plain centred greedy leaves). When more than one plate is genuinely
+needed, the requested algorithm is used at each size as normal (it can still cut
+the plate count).
 
 `-T` interacts with the shrink the same way `-B` does: centring the tall part
 needs a little room, so the very tightest bed would pack everything into a corner
