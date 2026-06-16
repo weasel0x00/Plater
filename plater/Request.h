@@ -5,6 +5,7 @@
 #include <sstream>
 #include <iostream>
 #include <vector>
+#include <atomic>
 #include "Part.h"
 #include "Solution.h"
 #include "PlacedPart.h"
@@ -90,8 +91,9 @@ namespace Plater
             bool hasError;
             std::string error;
 
-            // Cancel the running request
-            bool cancel;
+            // Cancel the running request. Read by the parallel anneal chains
+            // while it may be set from another thread, so make it atomic.
+            std::atomic<bool> cancel;
             // Number of plates
             int plates;
             std::vector<std::string> generatedFiles;

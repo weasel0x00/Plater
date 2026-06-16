@@ -58,6 +58,24 @@ namespace Plater
 
     void Zip::add(const std::string &name, const std::string &data)
     {
+        // Once a write has failed (or a limit was hit), don't keep appending to
+        // a broken file -- the offsets would no longer match what's on disk.
+        if (!out) {
+            return;
+        }
+
+        // The classic ZIP format stores sizes/offsets in 32-bit fields and the
+        // name length in a 16-bit field. Rather than silently truncating (which
+        // produces a corrupt archive), refuse and mark the stream failed so
+        // ok()/close() report the error.
+        uint64_t need = 30ull + name.size() + data.size();
+        if (name.size() > 0xFFFFu ||
+            data.size() > 0xFFFFFFFFull ||
+            (uint64_t)offset + need > 0xFFFFFFFFull) {
+            out.setstate(std::ios::failbit);
+            return;
+        }
+
         Entry entry;
         entry.name = name;
         entry.crc = crc32(data);
@@ -89,6 +107,12 @@ namespace Plater
             return out.good();
         }
         closed = true;
+
+        // The end-of-central-directory record counts entries in a 16-bit field.
+        if (entries.size() > 0xFFFFu) {
+            out.setstate(std::ios::failbit);
+            return false;
+        }
 
         uint32_t centralStart = offset;
 

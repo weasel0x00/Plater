@@ -37,7 +37,14 @@ namespace Plater
                 case '>':  out += "&gt;";   break;
                 case '"':  out += "&quot;"; break;
                 case '\'': out += "&apos;"; break;
-                default:   out += c;        break;
+                default:
+                    // Control characters (except tab/LF/CR) are not representable
+                    // in XML 1.0; drop them so a stray byte in a filename can't
+                    // make the .model/.config XML malformed.
+                    if ((unsigned char)c >= 0x20 || c == '\t' || c == '\n' || c == '\r') {
+                        out += c;
+                    }
+                    break;
             }
         }
         return out;

@@ -1,5 +1,6 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
+#include <cmath>
 #include <iostream>
 #include "Part.h"
 
@@ -40,6 +41,28 @@ namespace Plater
         // done once. allBmp keeps every rotation; the per-plate-size filtering
         // lives in applyPlateSize so a fit search can re-filter cheaply.
         model = loadModelFromFile(filename.c_str());
+
+        // Validate the mesh before any geometry work. An empty model means the
+        // file wasn't a readable STL (the loaders return an empty Model rather
+        // than throwing on garbage); non-finite coordinates (NaN/Inf) would flow
+        // into pixelize() and produce a bogus Bitmap size -> a huge or undefined
+        // allocation. Reject both up front with a clear error.
+        size_t nFaces = 0;
+        for (auto &vol : model.volumes) {
+            for (auto &face : vol.faces) {
+                for (int i=0; i<3; i++) {
+                    const Point3 &p = face.v[i];
+                    if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z)) {
+                        throw string("Malformed STL (non-finite coordinate): " + filename);
+                    }
+                }
+                nFaces++;
+            }
+        }
+        if (nFaces == 0) {
+            throw string("Empty or unreadable STL (no triangles): " + filename);
+        }
+
         model = model.putFaceOnPlate(orientation);
         // Mesh volume is orientation-independent; compute it once for plate
         // balancing (a print-time proxy).

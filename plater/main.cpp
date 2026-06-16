@@ -253,6 +253,7 @@ int main(int argc, char *argv[])
         }
     } else {
         help();
+        return EXIT_FAILURE;   // no input configuration given
     }
 
     if (shrinkMode) {
@@ -263,5 +264,7 @@ int main(int argc, char *argv[])
         request.process();
     }
 
-    return EXIT_SUCCESS;
+    // Surface failures (unreadable/malformed STL, part too big, write errors)
+    // as a non-zero exit code so scripts and pipelines can detect them.
+    return request.hasError ? EXIT_FAILURE : EXIT_SUCCESS;
 }

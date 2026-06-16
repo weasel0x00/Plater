@@ -369,6 +369,14 @@ namespace Plater
             return;
         }
 
+        // Recompute the balance/centre feasibility for THIS size from a clean
+        // slate, so the shrink/fit search never reads a value left over from a
+        // different plate size. Defaults: balance fits until a balance pass says
+        // otherwise; centring is assumed impossible under -T until a placement
+        // actually centres the tall part (conservative -- don't shrink past it).
+        balanceFit = true;
+        centerFit = !tallCenter;
+
         if (plateMode == PLATE_MODE_RECTANGLE) {
             _log("- Plate size: %g x %g microm\n", plateWidth, plateHeight);
         } else {

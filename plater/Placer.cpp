@@ -75,6 +75,22 @@ namespace Plater
 
     void Placer::setOrder(const std::vector<int> &order)
     {
+        // Defensive: only accept a true permutation of [0, parts.size()). A
+        // malformed order (wrong size, out-of-range, or a duplicated index)
+        // would alias the same PlacedPart into two queue slots and later
+        // double-free it (in two plates, or in the destructor). On bad input,
+        // leave the queue untouched rather than corrupt it.
+        if (order.size() != parts.size()) {
+            return;
+        }
+        std::vector<bool> seen(parts.size(), false);
+        for (int idx : order) {
+            if (idx < 0 || idx >= (int)parts.size() || seen[idx]) {
+                return;
+            }
+            seen[idx] = true;
+        }
+
         // place() pops the queue from the back (getNextPart), so the part to be
         // placed first must sit last. Build the queue reversed relative to the
         // requested placement order.
