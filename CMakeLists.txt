@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.6)
 
 project(Plater
-  VERSION      1.1
+  VERSION      2.0
   DESCRIPTION  "3D-printer parts placer and plate generator"
   LANGUAGES    CXX
 )
